@@ -17,6 +17,7 @@ namespace F8Framework.Core
 
         private Vector2 defaultItemPrefabSize = Vector2.zero;
 
+        public List<InfiniteScrollItem> ItemObjectList => itemObjectList;
         private List<InfiniteScrollItem> itemObjectList = new List<InfiniteScrollItem>();
 
         public float GetItemSize(int itemIndex)

@@ -30,7 +30,7 @@ namespace F8Framework.Core.Editor
 
         // 使用StringBuilder来优化字符串的重复构造
         private static StringBuilder FileIndex = new StringBuilder();
-        
+
         private static string GetScriptPath()
         {
             MonoScript monoScript = MonoScript.FromScriptableObject(CreateInstance<ExcelDataTool>());
@@ -43,12 +43,12 @@ namespace F8Framework.Core.Editor
 
             return scriptPath;
         }
-        
+
         private static void CreateAsmdefFile()
         {
             // 创建.asmdef文件的路径
             string asmrefPath = Application.dataPath + DLLFolder + "/" + CODE_NAMESPACE + ".asmdef";
-            
+
             FileTools.CheckFileAndCreateDirWhenNeeded(asmrefPath);
             // 创建一个新的.asmdef文件
             string asmdefContent = @"{
@@ -85,7 +85,7 @@ namespace F8Framework.Core.Editor
             F8EditorPrefs.SetString(BuildPkgTool.ExcelBinDataFolderKey, URLSetting.RemoveRootPath(ExcelBinDataFolder));
             LoadAllExcelData();
         }
-        
+
         public static void LoadAllExcelData()
         {
             if (F8EditorPrefs.GetString(BuildPkgTool.ExcelPathKey, null).IsNullOrEmpty())
@@ -96,11 +96,11 @@ namespace F8Framework.Core.Editor
                 LogF8.LogConfig("首次启动，设置Excel存放目录：" + tempExcelPath + " （如要更改请到----上方菜单栏->开发工具->设置Excel存放目录）");
             }
             string lastExcelPath = URLSetting.AddRootPath(F8EditorPrefs.GetString(BuildPkgTool.ExcelPathKey, null)) ?? Application.dataPath + ExcelPath;
-            
+
             string INPUT_PATH = lastExcelPath;
 
             FileTools.CheckDirAndCreateWhenNeeded(INPUT_PATH);
-            
+
             var files = Directory.GetFiles(INPUT_PATH, "*.*", SearchOption.AllDirectories)
                 .Where(s => (s.EndsWith(".xls") || s.EndsWith(".xlsx")) && !Path.GetFileName(s).StartsWith("~$"))
                 .ToArray();
@@ -119,7 +119,7 @@ namespace F8Framework.Core.Editor
                     .ToArray();
                 LogF8.LogError("暂无可以导入的数据表！自动为你创建：【DemoWorkSheet.xlsx / Localization.xlsx】两个表格！" + lastExcelPath + " 目录");
             }
-            
+
             if (codeList == null)
             {
                 codeList = new Dictionary<string, ScriptGenerator>();
@@ -137,13 +137,13 @@ namespace F8Framework.Core.Editor
             {
                 dataDict.Clear();
             }
-            
+
             FileIndex.Clear();
             FileTools.SafeDeleteFile(URLSetting.CS_STREAMINGASSETS_URL + FileIndexFile);
             FileTools.SafeDeleteFile(URLSetting.CS_STREAMINGASSETS_URL + FileIndexFile + ".meta");
-            
+
             FileTools.CheckFileAndCreateDirWhenNeeded(URLSetting.CS_STREAMINGASSETS_URL + FileIndexFile);
-            
+
             foreach (string item in files)
             {
                 GetExcelData(item);
@@ -155,30 +155,30 @@ namespace F8Framework.Core.Editor
                 EditorUtility.DisplayDialog("注意！！！", "\n暂无可以导入的数据表！", "确定");
                 throw new Exception("暂无可以导入的数据表！");
             }
-            
+
             string F8ExcelDataClassPath = FileTools.FormatToUnityPath(FileTools.TruncatePath(GetScriptPath(), 3)) + "/ConfigData/F8ExcelDataClass";
             FileTools.SafeClearDir(F8ExcelDataClassPath);
             LogF8.LogConfig("清空目录：" + F8ExcelDataClassPath);
             FileTools.CheckDirAndCreateWhenNeeded(F8ExcelDataClassPath);
-            
+
             // 编译代码,生成包含所有数据表内数据类型的dll
             GenerateCodeFiles(codeList);
-            
+
             string F8DataManagerPath = FileTools.FormatToUnityPath(FileTools.TruncatePath(GetScriptPath(), 3)) + "/ConfigData/F8DataManager";
             FileTools.SafeClearDir(F8DataManagerPath);
             LogF8.LogConfig("清空目录：" + F8DataManagerPath);
             FileTools.CheckDirAndCreateWhenNeeded(F8DataManagerPath);
-            
+
             // 生成F8DataManager.cs
             ScriptGenerator.CreateDataManager(codeList);
-            
+
             string F8ExcelDataClassPathDLL = FileTools.FormatToUnityPath(FileTools.TruncatePath(GetScriptPath(), 3)) + "/ConfigData/" + CODE_NAMESPACE + ".asmdef";
             FileTools.SafeDeleteFile(F8ExcelDataClassPathDLL);
             LogF8.LogConfig("删除文件：" + F8ExcelDataClassPathDLL);
             FileTools.SafeDeleteFile(F8ExcelDataClassPathDLL + ".meta");
             FileTools.SafeDeleteFile(Application.dataPath + DataManagerFolder + "/F8DataManager.asmref");
             CreateAsmdefFile();
-            
+
             AssetDatabase.Refresh(ImportAssetOptions.ForceUpdate);
             // 等待脚本编译完成
             CompilationPipeline.compilationFinished += (object s) =>
@@ -213,12 +213,16 @@ namespace F8Framework.Core.Editor
             LogF8.LogConfig("<color=#FF9E59>导表后脚本编译完成!</color>");
             Assembly assembly = Util.Assembly.GetAssembly(CODE_NAMESPACE);
             //准备序列化数据
-            string BinDataPath = URLSetting.AddRootPath(F8EditorPrefs.GetString(BuildPkgTool.ExcelBinDataFolderKey, null)) ?? Application.dataPath + BinDataFolder;
+            Debug.Log($" ----- AddRootPath {F8EditorPrefs.GetString(BuildPkgTool.ExcelBinDataFolderKey, null)} : {BuildPkgTool.ExcelBinDataFolderKey} ==== {Application.dataPath} ==== {BinDataFolder} ---{Application.dataPath + BinDataFolder}-- ");
+            var str = URLSetting.AddRootPath(F8EditorPrefs.GetString(BuildPkgTool.ExcelBinDataFolderKey, null));
+            string BinDataPath = string.IsNullOrEmpty(str) ? Application.dataPath + BinDataFolder : str;
             if (Directory.Exists(BinDataPath)) Directory.Delete(BinDataPath, true); //删除旧的数据文件
+            Debug.Log($"ExcelDataTool AllScriptsReloaded BinDataPath:{BinDataPath}");
             Directory.CreateDirectory(BinDataPath);
-            
-            string lastExcelPath = URLSetting.AddRootPath(F8EditorPrefs.GetString(BuildPkgTool.ExcelPathKey, null)) ?? Application.dataPath + ExcelPath;
-            
+
+            str = URLSetting.AddRootPath(F8EditorPrefs.GetString(BuildPkgTool.ExcelPathKey, null));
+            string lastExcelPath = string.IsNullOrEmpty(str) ? Application.dataPath + ExcelPath : str;
+
             string INPUT_PATH = lastExcelPath;
             var files = Directory.GetFiles(INPUT_PATH, "*.*", SearchOption.AllDirectories)
                 .Where(s => (s.EndsWith(".xls") || s.EndsWith(".xlsx")) && !Path.GetFileName(s).StartsWith("~$"))
@@ -243,7 +247,7 @@ namespace F8Framework.Core.Editor
             {
                 GetExcelData(item);
             }
-            
+
             foreach (KeyValuePair<string, List<ReadExcel.ConfigData[]>> each in dataDict)
             {
                 //Assembly.CreateInstance 方法 (String) 使用区分大小写的搜索，从此程序集中查找指定的类型，然后使用系统激活器创建它的实例化对象
@@ -252,9 +256,9 @@ namespace F8Framework.Core.Editor
                 //序列化数据
                 Serialize(container, temp, each.Value, BinDataPath);
             }
-            
+
             LogF8.LogConfig("<color=yellow>导表成功!</color>");
-            
+
             // 如果 Unity 检测到任何脚本更改，则会重新加载 C# 域。这样做的原因是可能已创建新的脚本化导入器 (Scripted Importer)，
             // 它们的逻辑可能会影响“刷新”队列中的资源导入结果。此步骤会重新启动 Refresh() 以确保所有新的脚本化导入器生效。
             UnityEditor.EditorApplication.delayCall += () =>
@@ -266,7 +270,7 @@ namespace F8Framework.Core.Editor
                 }
                 F8EditorPrefs.SetBool("compilationFinishedHotUpdateDll", false);
             };
-            
+
             UnityEditor.EditorApplication.delayCall += () =>
             {
                 AssetDatabase.Refresh();
@@ -276,7 +280,7 @@ namespace F8Framework.Core.Editor
                 }
                 F8EditorPrefs.SetBool("compilationFinishedBuildAB", false);
             };
-            
+
             UnityEditor.EditorApplication.delayCall += () =>
             {
                 if (F8EditorPrefs.GetBool("compilationFinishedBuildPkg", false) == true)
@@ -286,7 +290,7 @@ namespace F8Framework.Core.Editor
                 }
                 F8EditorPrefs.SetBool("compilationFinishedBuildPkg", false);
             };
-            
+
             UnityEditor.EditorApplication.delayCall += () =>
             {
                 if (F8EditorPrefs.GetBool("compilationFinishedBuildRun", false) == true)
@@ -295,7 +299,7 @@ namespace F8Framework.Core.Editor
                 }
                 F8EditorPrefs.SetBool("compilationFinishedBuildRun", false);
             };
-            
+
             UnityEditor.EditorApplication.delayCall += () =>
             {
                 if (F8EditorPrefs.GetBool("compilationFinishedBuildUpdate", false) == true)
@@ -305,7 +309,7 @@ namespace F8Framework.Core.Editor
                 F8EditorPrefs.SetBool("compilationFinishedBuildUpdate", false);
             };
         }
-        
+
         [UnityEditor.MenuItem("开发工具/运行时读取Excel _F7", false, 101)]
         public static void ReLoadExcelData()
         {
@@ -323,7 +327,7 @@ namespace F8Framework.Core.Editor
 
             FileIndex.Remove(0, FileIndex.Length);
         }
-        
+
         private static void GetExcelData(string inputPath)
         {
             FileStream stream = null;
@@ -331,7 +335,7 @@ namespace F8Framework.Core.Editor
             try
             {
                 stream = File.Open(inputPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
-                
+
                 if (inputPath.EndsWith(".xls")) excelReader = ExcelReaderFactory.CreateBinaryReader(stream);
                 else if (inputPath.EndsWith(".xlsx")) excelReader = ExcelReaderFactory.CreateOpenXmlReader(stream);
                 if (!excelReader.IsValid)
@@ -342,10 +346,14 @@ namespace F8Framework.Core.Editor
                 {
                     // sheet name
                     string className = excelReader.Name;
+                    if (className.StartsWith("#")) continue;
                     string[] types = null; //数据类型
                     string[] names = null; //字段名
+                    // bool[] isKeys = null;   //是否关键字
                     List<ReadExcel.ConfigData[]> dataList = new List<ReadExcel.ConfigData[]>();
                     int index = 1;
+                    int startIdx = 0;
+                    int keyIdx = 0;
                     //把读取的数据和数据类型,名称保存起来,后面用来动态生成类
                     List<ReadExcel.ConfigData> configDataList = new List<ReadExcel.ConfigData>();
                     //开始读取
@@ -364,35 +372,55 @@ namespace F8Framework.Core.Editor
                             ++index;
                             continue;
                         }
+                        // 第一行表示说明及主键
+                        if (index == 1)
+                        {
+                            for (int i = 0; i < datas.Length; ++i)
+                            {
+                                if (string.IsNullOrEmpty(datas[i]))
+                                {
+                                    continue;
+                                }
+                                if (datas[i].ToLower().EndsWith(":key"))
+                                {
+                                    startIdx = 1;
+                                    keyIdx = i;
+                                    break;
+                                }
+                            }
+                        }
 
                         //第1行表示类型
-                        if (index == 1) types = datas;
+                        if (index == startIdx + 1) types = datas;
                         //第2行表示变量名
-                        else if (index == 2) names = datas;
+                        else if (index == startIdx + 2) names = datas;
                         //后面的表示数据
-                        else if (index > 2)
+                        else if (index > startIdx + 2)
                         {
                             if (types == null || names == null || datas == null)
                             {
                                 throw new Exception("数据错误！[" + className + "]配置表！第" + index + "行" + inputPath);
                             }
-                            
+
                             configDataList.Clear();
                             for (int j = 0; j < datas.Length; ++j)
                             {
                                 if (string.IsNullOrEmpty(types[j]))
                                     continue; //空的数据不处理
-                                
+
                                 ReadExcel.ConfigData data = new ReadExcel.ConfigData();
-                                data.Type = types[j];
-                                data.Name = names[j];
+                                data.Type = types[j].Replace(" ", "");
+                                data.Name = names[j].Replace(" ", "");
                                 data.Data = datas[j];
-                                
+                                data.IsKey = j == keyIdx;
+                                if (string.IsNullOrEmpty(data.Type) || string.IsNullOrEmpty(data.Name))
+                                    continue; //空的数据不处理
+
                                 configDataList.Add(data);
                             }
 
                             ReadExcel.VariantInfoDict(ref configDataList);
-                            
+
                             dataList.Add(configDataList.ToArray());
                         }
 
@@ -490,11 +518,11 @@ namespace F8Framework.Core.Editor
                     LogF8.LogException(e);
                     throw new Exception("表格生成错误，修改后重试F8：" + kvp.Key + ".cs" + "\n");
                 }
-                
+
                 LogF8.LogConfig($"已生成代码 " + path + "/<color=#FF9E59>" + kvp.Key + ".cs</color>");
             }
         }
-        
+
         //序列化对象
         private static void Serialize(object container, Type temp, List<ReadExcel.ConfigData[]> dataList, string BinDataPath)
         {
@@ -503,7 +531,7 @@ namespace F8Framework.Core.Editor
             {
                 //Type.FullName 获取该类型的完全限定名称，包括其命名空间，但不包括程序集。
                 object t = Util.Assembly.GetTypeInstance(temp.FullName);
-
+                string keyName = "id";
                 foreach (ReadExcel.ConfigData data in datas)
                 {
                     if (data.VariantInfo != null)
@@ -512,9 +540,9 @@ namespace F8Framework.Core.Editor
                             ? "_" + data.Name + "Variants"
                             : data.Name;
                         FieldInfo variantDictField = temp.GetField(name, BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
-                        
+
                         if (variantDictField == null) continue;
-                        
+
                         object variantDict = variantDictField.GetValue(t);
 
                         foreach (var variantData in data.VariantInfo.Variants)
@@ -522,12 +550,16 @@ namespace F8Framework.Core.Editor
                             object variantValue = ReadExcel.ParseValue(data.Type, variantData.Value, temp.Name);
                             variantDict.GetType().GetMethod("Add").Invoke(variantDict, new object[] { variantData.Key, variantValue });
                         }
-                        
+
                         variantDictField.SetValue(t, variantDict);
                     }
                     else
                     {
                         FieldInfo info = temp.GetField(data.Name);
+                        if (data.IsKey)
+                        {
+                            keyName = data.Name;
+                        }
                         // FieldInfo.SetValue 设置对象内指定名称的字段的值
                         if (info != null)
                         {
@@ -541,7 +573,8 @@ namespace F8Framework.Core.Editor
                 PropertyInfo propertyInfoId = null;
                 foreach (var field in temp.GetFields())
                 {
-                    if (!string.Equals(field.Name, "id", StringComparison.OrdinalIgnoreCase)) continue;
+                    //if (!string.Equals(field.Name, "id", StringComparison.OrdinalIgnoreCase)) continue;
+                    if (!string.Equals(field.Name, keyName, StringComparison.OrdinalIgnoreCase)) continue;
                     fieldInfoId = field;
                     break;
                 }
@@ -550,7 +583,8 @@ namespace F8Framework.Core.Editor
                 {
                     foreach (var property in temp.GetProperties())
                     {
-                        if (!string.Equals(property.Name, "id", StringComparison.OrdinalIgnoreCase)) continue;
+                        // if (!string.Equals(property.Name, "id", StringComparison.OrdinalIgnoreCase)) continue;
+                        if (!string.Equals(property.Name, keyName, StringComparison.OrdinalIgnoreCase)) continue;
                         propertyInfoId = property;
                         break;
                     }
@@ -591,7 +625,8 @@ namespace F8Framework.Core.Editor
                 {
                     LogF8.LogError($"序列化失败: {e}");
                 }
-            }else
+            }
+            else
             {
                 try
                 {
