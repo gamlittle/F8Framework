@@ -49,8 +49,8 @@ Unity 读取 Excel 的工具
 ## Excel 示例
 
 #### 类型可分为 1. 基础类型 2. 容器类型 3. 特殊类型
-* 1.[C# 基础类型支持](https://learn.microsoft.com/en-us/dotnet/csharp/language-reference/builtin-types/built-in-types)（bool，byte，short，int，long，float，double，decimal，str / string，obj / object，[datetime](https://learn.microsoft.com/en-us/dotnet/api/system.datetime.-ctor?view=net-9.0)，sbyte，ushort，uint，ulong）  
-Unity基础类型支持（[vec2 / vector2](https://docs.unity3d.com/ScriptReference/Vector2-ctor.html)，[vec3 / vector3](https://docs.unity3d.com/ScriptReference/Vector3-ctor.html)，[vec4 / vector4](https://docs.unity3d.com/ScriptReference/Vector4-ctor.html)，[vec2int / vector2int](https://docs.unity3d.com/ScriptReference/Vector2Int-ctor.html)，[vec3int / vector3int](https://docs.unity3d.com/ScriptReference/Vector3Int.html)，[quat / quaternion](https://docs.unity3d.com/ScriptReference/Quaternion-ctor.html)，[color](https://docs.unity3d.com/ScriptReference/Color.html)）  
+* 1.[C# 基础类型支持](https://learn.microsoft.com/en-us/dotnet/csharp/language-reference/builtin-types/built-in-types)（char，bool，byte，short，int，long，float，double，decimal，str / string，obj / object，[datetime](https://learn.microsoft.com/en-us/dotnet/api/system.datetime.-ctor?view=net-9.0)，sbyte，ushort，uint，ulong）  
+Unity基础类型支持（[vec2 / vector2](https://docs.unity3d.com/ScriptReference/Vector2-ctor.html)，[vec3 / vector3](https://docs.unity3d.com/ScriptReference/Vector3-ctor.html)，[vec4 / vector4](https://docs.unity3d.com/ScriptReference/Vector4-ctor.html)，[vec2int / vector2int](https://docs.unity3d.com/ScriptReference/Vector2Int-ctor.html)，[vec3int / vector3int](https://docs.unity3d.com/ScriptReference/Vector3Int.html)，[quat / quaternion](https://docs.unity3d.com/ScriptReference/Quaternion-ctor.html)，[color](https://docs.unity3d.com/ScriptReference/Color.html)，[color32](https://docs.unity3d.com/ScriptReference/Color32.html)）  
 
 Excel 示例：（id 是唯一索引，值类型，必须添加！）  
 
@@ -85,7 +85,7 @@ Excel 示例：
     * 可实现一键切换配置表变体，以此实现多语言/多版本配置
 
 Excel 示例：  
-（可选参数：int类型(默认)，Flags特性，标志枚举：Value1, Value2，跨表访问：Sheet1.name）  
+（可选参数：int类型(默认)，Flags特性，标志枚举：Value1, Value2，可跨表访问：Sheet1.name）  
 
 | enum<name,int,Flags>{Value1 = 1,Value2 = 2,Value3 = 4,Value4 = 8,} | enum<Sheet1.name> | enum<Status,long>{OK = 200,Success = 200,Created = 201,Accepted = 202,} |
 |--------------------------------------------------------------------|-------------------|-------------------------------------------------------------------------|
@@ -98,6 +98,9 @@ Excel 示例：
 ```C#
 // 设置变体名
 FF8.Config.VariantName = "English";
+
+// 设置单个表变体名（更优先）
+Sheet1.VariantName = "English";
 ```
 | string | variant<desc,English> | variant<desc,Korean> | int    | variant<attack,English> | variant<attack,Korean> |
 |--------|-----------------------|----------------------|--------|-------------------------|------------------------|
@@ -107,7 +110,12 @@ FF8.Config.VariantName = "English";
 | 中文3    | Chinese 3             | 중국어 3                | 1000    | 800                     | 300                    |
 | 中文4    | Chinese 4             | 중국어 4                | 1000    | 800                     | 300                    |
 
-（你还可以拓展其他类型：[ReadExcel.cs](https://github.com/TippingGame/F8Framework/blob/main/Runtime/ExcelTool/ReadExcel.cs)）
+（你还可以拓展其他类型：[ReadExcel.cs](https://github.com/TippingGame/F8Framework/blob/main/Runtime/ExcelTool/ReadExcel.cs)）  
+
+* 额外说明：
+  * 整行不导出：`id`留空
+  * 整列不导出：`type`留空或`name`留空
+
 ## 使用范例
 
 **在使用 Excel 数据前，需要执行**：
@@ -168,7 +176,7 @@ I18N.Other.dll\
 I18N.Rare.dll\
 I18N.West.dll\
 [ICSharpCode.SharpZipLib.dll](https://github.com/icsharpcode/SharpZipLib)  
-[LitJson.dll](https://github.com/LitJSON/litjson)（已修改字典Key支持所有基础和枚举类型，增加Unity常用类型：Type，Vector2，Vector3，Vector4，Quaternion，GameObject，Transform，Color，Color32，Bounds，Rect，RectOffset，LayerMask，Vector2Int，Vector3Int，RangeInt，BoundsInt，修复DateTime精度丢失的问题）
+[LitJson.dll](https://github.com/LitJSON/litjson)（已修改字典Key支持所有基础和枚举类型，增加Unity常用类型：Type，Vector2，Vector3，Vector4，Quaternion，GameObject，Transform，Color，Color32，Bounds，Rect，RectOffset，LayerMask，Vector2Int，Vector3Int，RangeInt，BoundsInt，修复DateTime精度丢失的问题，修复long报错的问题）
 
 ## 你可能需要写入Excel
 使用 [EPPlus.dll（已内置）](https://github.com/TippingGame/F8Framework/blob/main/Plugins/EPPlus.dll)但未启用，请手动选择编译的平台  

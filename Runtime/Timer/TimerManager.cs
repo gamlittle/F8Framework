@@ -132,6 +132,46 @@ namespace F8Framework.Core
             times.Add(timer);
             return id;
         }
+        
+        public int AddTimer(float duration, Action onComplete, bool ignoreTimeScale = false)
+        {
+            return AddTimer(this, duration, duration, 1, null, onComplete, ignoreTimeScale);
+        }
+        
+        public int AddTimer(float duration, bool isLoop, Action onComplete = null, bool ignoreTimeScale = false)
+        {
+            if (isLoop)
+            {
+                return AddTimer(this, duration, duration, -1, onComplete, null, ignoreTimeScale);
+            }
+
+            return AddTimer(this, duration, duration, 1, null, onComplete, ignoreTimeScale);
+        }
+        
+        public int AddTimer(float step = 1f, int field = 0, Action onSecond = null, Action onComplete = null, bool ignoreTimeScale = false)
+        {
+            return AddTimer(this, step, step, field, onSecond, onComplete, ignoreTimeScale);
+        }
+        
+        public int AddTimer(object handle, float duration, Action onComplete, bool ignoreTimeScale = false)
+        {
+            return AddTimer(handle, duration, duration, 1, null, onComplete, ignoreTimeScale);
+        }
+        
+        public int AddTimer(object handle, float duration, bool isLoop, Action onComplete = null, bool ignoreTimeScale = false)
+        {
+            if (isLoop)
+            {
+                return AddTimer(handle, duration, duration, -1, onComplete, null, ignoreTimeScale);
+            }
+
+            return AddTimer(handle, duration, duration, 1, null, onComplete, ignoreTimeScale);
+        }
+        
+        public int AddTimer(object handle, float step = 1f, int field = 0, Action onSecond = null, Action onComplete = null, bool ignoreTimeScale = false)
+        {
+            return AddTimer(handle, step, step, field, onSecond, onComplete, ignoreTimeScale);
+        }
 
         // 注册一个以帧为单位的计时器并返回其ID
         public int AddTimerFrame(object handle, float stepFrame = 1f, float delayFrame = 0f, int field = 0, Action onFrame = null, Action onComplete = null, bool ignoreTimeScale = false)
@@ -140,6 +180,46 @@ namespace F8Framework.Core
             Timer timer = GetTimer(handle, id, stepFrame, delayFrame, field, onFrame, onComplete, ignoreTimeScale, true); // 创建一个以帧为单位的计时器对象
             times.Add(timer);
             return id;
+        }
+        
+        public int AddTimerFrame(float duration, Action onComplete, bool ignoreTimeScale = false)
+        {
+            return AddTimerFrame(this, duration, duration, 1, null, onComplete, ignoreTimeScale);
+        }
+        
+        public int AddTimerFrame(float duration, bool isLoop, Action onComplete, bool ignoreTimeScale = false)
+        {
+            if (isLoop)
+            {
+                return AddTimerFrame(this, duration, duration, -1, onComplete, null, ignoreTimeScale);
+            }
+
+            return AddTimerFrame(this, duration, duration, 1, null, onComplete, ignoreTimeScale);
+        }
+        
+        public int AddTimerFrame(float step = 1f, int field = 0, Action onSecond = null, Action onComplete = null, bool ignoreTimeScale = false)
+        {
+            return AddTimerFrame(this, step, step, field, onSecond, onComplete, ignoreTimeScale);
+        }
+        
+        public int AddTimerFrame(object handle, float duration, Action onComplete, bool ignoreTimeScale = false)
+        {
+            return AddTimerFrame(handle, duration, duration, 1, null, onComplete, ignoreTimeScale);
+        }
+        
+        public int AddTimerFrame(object handle, float duration, bool isLoop, Action onComplete, bool ignoreTimeScale = false)
+        {
+            if (isLoop)
+            {
+                return AddTimerFrame(handle, duration, duration, -1, onComplete, null, ignoreTimeScale);
+            }
+
+            return AddTimerFrame(handle, duration, duration, 1, null, onComplete, ignoreTimeScale);
+        }
+        
+        public int AddTimerFrame(object handle, float step = 1f, int field = 0, Action onSecond = null, Action onComplete = null, bool ignoreTimeScale = false)
+        {
+            return AddTimerFrame(handle, step, step, field, onSecond, onComplete, ignoreTimeScale);
         }
 
         // 根据ID注销计时器

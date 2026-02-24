@@ -6,6 +6,8 @@ namespace F8Framework.Core
     {
         private float from = 0.0f;
         private float to = 0.0f;
+        private float originalTo = 0.0f;
+        private float originalFrom = 0.0f;
         
         public ValueTween(float from, float to, float t, int id)
         {
@@ -13,10 +15,12 @@ namespace F8Framework.Core
             Init(from, to, t);
         }
 
-        public void Init(float from, float to, float t)
+        internal void Init(float from, float to, float t)
         {
             this.from = from;
             this.to = to;
+            this.originalTo = to;
+            this.originalFrom = from;
             this.duration = t;
             this.PauseReset = () => this.Init(from, to, t);
         }
@@ -24,15 +28,15 @@ namespace F8Framework.Core
         /// <summary>
         /// 每帧执行的更新逻辑
         /// </summary>
-        public override void Update(float deltaTime)
+        internal override void Update(float deltaTime)
         {
             if(isPause || IsComplete || IsRecycle)
                 return;
 
             // 处理启动延迟
-            if (delay > 0.0f)
+            if (tempDelay > 0.0f)
             {
-                delay -= deltaTime;
+                tempDelay -= deltaTime;
                 return;
             }
 
@@ -43,37 +47,61 @@ namespace F8Framework.Core
             // 检查是否完成当前周期
             if (currentTime >= duration)
             {
-                if (onUpdateFloat != null)
-                    onUpdateFloat(to);
+                this.UpdateValue(true);
                 
                 bool shouldComplete = !HandleLoop();
                 if (shouldComplete)
                     onComplete();
+                return;
             }
-            
-            float normalizedProgress = currentTime >= duration ? 1.0f : currentTime / duration;
-            // 通过曲线函数计算缓动进度
-            float curveProgress = GetCurveProgress(normalizedProgress);
-            
-            // 基于缓动算法计算当前值
-            float value = EasingFunctions.ChangeFloat(from, to, curveProgress, ease);
-            
-            // 触发值更新回调
-            if (onUpdateFloat != null)
-                onUpdateFloat(value);
+
+            this.UpdateValue(false);
         }
 
-        public override void Reset()
+        internal override void UpdateValue(bool isEnd = false)
+        {
+            base.UpdateValue(isEnd);
+            if (isEnd)
+            {
+                if (onUpdateFloat != null)
+                    onUpdateFloat(loopType == LoopType.Yoyo ? from : to);
+            }
+            else
+            {
+                float normalizedProgress = currentTime >= duration ? 1.0f : currentTime / duration;
+                // 通过曲线函数计算缓动进度
+                float curveProgress = GetCurveProgress(normalizedProgress);
+            
+                // 基于缓动算法计算当前值
+                float value = EasingFunctions.ChangeFloat(from, to, curveProgress, ease);
+            
+                // 触发值更新回调
+                if (onUpdateFloat != null)
+                    onUpdateFloat(value);
+            }
+        }
+        
+        internal override void Reset()
         {
             base.Reset();
-            from = 0;
-            to = 0;
+            from = 0.0f;
+            to = 0.0f;
+            originalTo = 0.0f;
+            originalFrom = 0.0f;
         }
 
-        public override void ReplayReset()
+        public override BaseTween ReplayReset()
         {
             base.ReplayReset();
-            Init(from, to, duration);
+            to = originalTo;
+            from = originalFrom;
+            return this;
+        }
+        
+        public override BaseTween LoopReset()
+        {
+            base.LoopReset();
+            return this;
         }
         
         private float GetCurveProgress(float normalizedProgress)
@@ -90,17 +118,17 @@ namespace F8Framework.Core
         
         private bool HandleLoop()
         {
-            if (this.loopType == LoopType.None || this.tempLoopCount == 0)
+            if (loopType == LoopType.None || tempLoopCount == 0)
             {
                 return false;
             }
             else
             {
-                if (this.tempLoopCount > 0)
+                if (tempLoopCount > 0)
                 {
-                    this.tempLoopCount -= 1;
+                    tempLoopCount -= 1;
                 }
-                switch (this.loopType)
+                switch (loopType)
                 {
                     case LoopType.Restart:
                         break;
@@ -117,8 +145,8 @@ namespace F8Framework.Core
                     case LoopType.Yoyo:
                         break;
                 }
-                this.ReplayReset();
-                return this.tempLoopCount > 0 || this.tempLoopCount == -1;
+                this.LoopReset();
+                return tempLoopCount > 0 || tempLoopCount == -1;
             }
         }
     }

@@ -5,7 +5,7 @@
 [![Platform](https://img.shields.io/badge/platform-Win%20%7C%20Android%20%7C%20iOS%20%7C%20Mac%20%7C%20Linux%20%7C%20WebGL-orange)]() 
 
 ## 简介（希望自己点击F8，就能开始制作游戏，不想多余的事）
-Unity F8 Tween组件，补间动画，播放/终止动画，**自由组合**动画，有旋转/位移/缩放/渐变/填充/震动动画，可根据UI的**相对布局**位移动画。  
+Unity F8 Tween组件，补间动画，播放/终止动画，**自由组合**动画，有旋转/位移/缩放/渐变/填充/震动/字符串动画，可根据UI的**相对布局**位移动画。  
 
 ## 导入插件（需要首先导入核心）
 注意！内置在->F8Framework核心：https://github.com/TippingGame/F8Framework.git  
@@ -32,6 +32,7 @@ void Start()
 
     // 旋转
     gameObject.RotateTween(Vector3.one, 1f);
+    gameObject.EulerAnglesTween(Vector3.one * 360f, 1f);
     // 位移
     gameObject.Move(Vector3.one, 1f);
     gameObject.MoveAtSpeed(Vector3.one, 2f);
@@ -53,9 +54,11 @@ void Start()
     gameObject.PathTween(new Vector3[] { Vector3.zero, Vector3.one * 100f, Vector3.one * 200f }, duration: 1f, pathType: PathType.CatmullRom,
         pathMode: PathMode.Ignore, resolution: 10, closePath: false);
     gameObject.LocalPathTween(new Vector3[] { Vector3.zero, Vector3.one * 100f, Vector3.one * 200f }, duration: 1f);
+    // 字符串动画
+    gameObject.GetComponent<Text>().StringTween("", "Hello World!", 1f, richTextEnabled: true, ScrambleMode.Custom, scrambleChars: "*");
     
     // 链式调用
-    gameObject.Move(Vector3.one, 1f)
+    BaseTween baseTween = gameObject.Move(Vector3.one, 10f)
         .SetEase(Ease.EaseOutQuad) // 设置Ease
         .SetOnComplete(OnViewOpen) // 设置完成回调
         .SetDelay(2f) // 设置Delay
@@ -63,20 +66,47 @@ void Start()
         .SetLoopType(LoopType.Yoyo, 3) // 设置循环类型（Restart，Flip，Incremental，Yoyo），循环次数
         .SetUpdateMode(UpdateMode.Update) // 设置Update模式，默认为Update
         .SetOwner(gameObject) // 设置动画拥有者
-        .SetIsPause(false); // 设置是否暂停
+        .SetIsPause(false) // 设置是否暂停
         .SetIgnoreTimeScale(true) // 设置是否忽略时间缩放
-        .SetCustomId("customId"); // 设置自定义ID
+        .SetCustomId("customId") // 设置自定义ID
+        .SetCurrentTime(5f) // 设置当前时间
+        .SetProgress(0.5f) // 设置当前进度
+        .SetAutoKill(false) // 默认为true，使用完自动回收，持有的BaseTween可能已被复用
+        .Complete() // 立即完成动画
+        .ReplayReset(); // 重播动画
     
+    baseTween.CurrentTime = 5f;  // 设置或获取当前时间
+    baseTween.Progress = 0.5f;  // 设置或获取当前进度
+    
+    // 只允许使用ID控制动画，因为动画默认自动回收，请使用SetAutoKill(false)禁用自动回收
     // 设置自定义ID
     FF8.Tween.SetCustomId(id, "customId");
     
-    // 设置是否暂停
-    FF8.Tween.SetIsPause(id, true);
-    FF8.Tween.SetIsPause("customId", true);
+    // 设置当前时间（可使用id，customId，gameObject三种方式）
+    FF8.Tween.SetCurrentTime(id, 5f);
+    FF8.Tween.SetCurrentTime("customId", 5f);
+    FF8.Tween.SetCurrentTime(gameObject, 5f);
     
-    // 设置是否忽略时间缩放
+    // 设置当前进度（同上）
+    FF8.Tween.SetProgress(id, 0.5f);
+    
+    // 立即完成动画（同上）
+    FF8.Tween.Complete(id);
+    
+    // 重播动画（同上）
+    FF8.Tween.ReplayReset(id);
+    
+    // 设置是否暂停（同上）
+    FF8.Tween.SetIsPause(id, true);
+    
+    // 设置是否忽略时间缩放（同上）
     FF8.Tween.SetIgnoreTimeScale(id, true);
-    FF8.Tween.SetIgnoreTimeScale("customId", true);
+    
+    // 取消动画（同上）
+    int id2 = baseTween.ID;
+    FF8.Tween.CancelTween(id2);
+    gameObject.CancelTween(id2);
+    gameObject.CancelAllTweens();
     
     // 你也可以这样使用，设置OnUpdate
     // 数字缓动变化
@@ -85,21 +115,11 @@ void Start()
         LogF8.Log(v);
     });
     
-    // 取消动画，只允许使用ID取消动画，动画基类会回收再利用，但ID唯一递增
-    int id2 = valueTween.ID;
-    FF8.Tween.CancelTween(id2);
-    FF8.Tween.CancelTween("customId");
-    
     // 物体移动
     BaseTween gameObjectTween = FF8.Tween.Move(gameObject, Vector3.one, 3f).SetOnUpdateVector3((Vector3 v) =>
     {
         LogF8.Log(v);
     });
-        
-    // 设置动画拥有者后，可使用此取消方式
-    gameObjectTween.SetOwner(gameObject);
-    FF8.Tween.CancelTween(gameObject);
-    gameObject.CancelAllTweens();
     
     // 根据相对坐标移动UI
     // (0.0 , 1.0) _______________________(1.0 , 1.0)

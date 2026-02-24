@@ -15,14 +15,15 @@ namespace F8Framework.Core
         private PathCalculator pathCalculator;
         private Vector3 tempValue = Vector3.zero;
         private Quaternion tempRotation = Quaternion.identity;
+        private bool isLocalPath = false;
         
-        public PathTween(Transform target, IList<Vector3> path, float duration, PathType pathType, PathMode pathMode, int resolution, bool closePath, int id)
+        public PathTween(Transform target, IList<Vector3> path, float duration, PathType pathType, PathMode pathMode, int resolution, bool closePath, bool isLocalPath, int id)
         {
-            Init(target, path, duration, pathType, pathMode, resolution, closePath);
             this.id = id;
+            Init(target, path, duration, pathType, pathMode, resolution, closePath, isLocalPath);
         }
 
-        internal void Init(Transform target, IList<Vector3> path, float duration, PathType pathType, PathMode pathMode, int resolution, bool closePath)
+        internal void Init(Transform target, IList<Vector3> path, float duration, PathType pathType, PathMode pathMode, int resolution, bool closePath, bool isLocalPath = false)
         {
             this.targetTransform = target;
             if (path is Vector3[] array)
@@ -42,11 +43,12 @@ namespace F8Framework.Core
             this.pathMode = pathMode;
             this.resolution = Mathf.Max(2, resolution);
             this.closePath = closePath;
+            this.isLocalPath = isLocalPath;
             
             // 初始化路径计算器
             InitializePathCalculator();
             
-            this.PauseReset = () => this.Init(target, path, duration, pathType, pathMode, resolution, closePath);
+            this.PauseReset = () => this.Init(target, path, duration, pathType, pathMode, resolution, closePath, isLocalPath);
         }
 
         /// <summary>
@@ -71,15 +73,15 @@ namespace F8Framework.Core
         /// <summary>
         /// 每帧执行的更新逻辑
         /// </summary>
-        public override void Update(float deltaTime)
+        internal override void Update(float deltaTime)
         {
             if (isPause || IsComplete || IsRecycle || targetTransform == null || pathCalculator == null)
                 return;
 
             // 处理启动延迟
-            if (delay > 0.0f)
+            if (tempDelay > 0.0f)
             {
-                delay -= deltaTime;
+                tempDelay -= deltaTime;
                 return;
             }
             
@@ -91,11 +93,24 @@ namespace F8Framework.Core
             if (currentTime >= duration)
             {
                 // 确保到达终点
-                UpdateTransform(1f);
+                this.UpdateValue(true);
                 
                 bool shouldComplete = !HandleLoop();
                 if (shouldComplete)
                     onComplete();
+            }
+            else
+            {
+                this.UpdateValue(false);
+            }
+        }
+
+        internal override void UpdateValue(bool isEnd = false)
+        {
+            base.UpdateValue(isEnd);
+            if (isEnd)
+            {
+                UpdateTransform(1f);
             }
             else
             {
@@ -107,7 +122,7 @@ namespace F8Framework.Core
                 UpdateTransform(curveProgress);
             }
         }
-
+        
         /// <summary>
         /// 更新位置和旋转
         /// </summary>
@@ -117,9 +132,24 @@ namespace F8Framework.Core
                 return;
                 
             // 获取路径上的位置
-            Vector3 newPosition = pathCalculator.GetPoint(progress);
+            Vector3 newPosition;
+            if (loopType == LoopType.Yoyo && progress >= 1f)
+            {
+                newPosition = pathCalculator.GetPoint(0f);
+            }
+            else
+            {
+                newPosition = pathCalculator.GetPoint(progress);
+            }
             tempValue = newPosition;
-            targetTransform.position = newPosition;
+            if (isLocalPath)
+            {
+                targetTransform.localPosition = newPosition;
+            }
+            else
+            {
+                targetTransform.position = newPosition;
+            }
             
             // 处理朝向
             UpdateRotation(progress, newPosition);
@@ -149,14 +179,28 @@ namespace F8Framework.Core
                 case PathMode.Full3D:
                     // 3D朝向，Z轴指向移动方向
                     tempRotation = Quaternion.LookRotation(direction);
-                    targetTransform.rotation = tempRotation;
+                    if (isLocalPath)
+                    {
+                        targetTransform.localRotation = tempRotation;
+                    }
+                    else
+                    {
+                        targetTransform.rotation = tempRotation;
+                    }
                     break;
                     
                 case PathMode.TopDown2D:
                     // 俯视2D，在XY平面内旋转
                     float angle = Mathf.Atan2(direction.y, direction.x) * Mathf.Rad2Deg;
                     tempRotation = Quaternion.Euler(0, 0, angle - 90);
-                    targetTransform.rotation = tempRotation;
+                    if (isLocalPath)
+                    {
+                        targetTransform.localRotation = tempRotation;
+                    }
+                    else
+                    {
+                        targetTransform.rotation = tempRotation;
+                    }
                     break;
                     
                 case PathMode.Sidescroller2D:
@@ -182,14 +226,14 @@ namespace F8Framework.Core
         /// <summary>
         /// 设置是否闭合路径
         /// </summary>
-        public PathTween SetClosePath(bool close)
+        internal PathTween SetClosePath(bool close)
         {
             this.closePath = close;
             InitializePathCalculator(); // 重新初始化计算器
             return this;
         }
 
-        public override void Reset()
+        internal override void Reset()
         {
             base.Reset();
             targetTransform = null;
@@ -199,15 +243,19 @@ namespace F8Framework.Core
             pathMode = PathMode.Ignore;
             resolution = 10;
             closePath = false;
+            isLocalPath = false;
         }
 
-        public override void ReplayReset()
+        public override BaseTween ReplayReset()
         {
             base.ReplayReset();
-            if (targetTransform != null && path != null)
-            {
-                Init(targetTransform, path, duration, pathType, pathMode, resolution, closePath);
-            }
+            return this;
+        }
+        
+        public override BaseTween LoopReset()
+        {
+            base.LoopReset();
+            return this;
         }
         
         private float GetCurveProgress(float normalizedProgress)
@@ -224,20 +272,20 @@ namespace F8Framework.Core
         
         private bool HandleLoop()
         {
-            if (this.loopType == LoopType.None || this.tempLoopCount == 0)
+            if (loopType == LoopType.None || tempLoopCount == 0)
             {
                 return false;
             }
             else
             {
-                if (this.tempLoopCount > 0)
+                if (tempLoopCount > 0)
                 {
-                    this.tempLoopCount -= 1;
+                    tempLoopCount -= 1;
                 }
                 
                 // 对于路径动画，大部分循环类型不需要特殊处理
                 // 因为路径计算器会处理进度
-                switch (this.loopType)
+                switch (loopType)
                 {
                     case LoopType.Restart:
                         break;
@@ -250,9 +298,8 @@ namespace F8Framework.Core
                     case LoopType.Yoyo:
                         break;
                 }
-                
-                this.ReplayReset();
-                return this.tempLoopCount > 0 || this.tempLoopCount == -1;
+                this.LoopReset();
+                return tempLoopCount > 0 || tempLoopCount == -1;
             }
         }
     }

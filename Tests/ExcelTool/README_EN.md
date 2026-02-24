@@ -47,8 +47,8 @@ Method 2: Unity → Menu Bar → Window → Package Manager → "+" → Add Pack
 2. Container Types
 3. Special Types
 
-* 1.[C# Basic Types](https://learn.microsoft.com/en-us/dotnet/csharp/language-reference/builtin-types/built-in-types)（bool，byte，short，int，long，float，double，decimal，str / string，obj / object，[datetime](https://learn.microsoft.com/en-us/dotnet/api/system.datetime.-ctor?view=net-9.0)，sbyte，ushort，uint，ulong）  
-  UnityBasic Types（[vec2 / vector2](https://docs.unity3d.com/ScriptReference/Vector2-ctor.html)，[vec3 / vector3](https://docs.unity3d.com/ScriptReference/Vector3-ctor.html)，[vec4 / vector4](https://docs.unity3d.com/ScriptReference/Vector4-ctor.html)，[vec2int / vector2int](https://docs.unity3d.com/ScriptReference/Vector2Int-ctor.html)，[vec3int / vector3int](https://docs.unity3d.com/ScriptReference/Vector3Int.html)，[quat / quaternion](https://docs.unity3d.com/ScriptReference/Quaternion-ctor.html)，[color](https://docs.unity3d.com/ScriptReference/Color.html)）  
+* 1.[C# Basic Types](https://learn.microsoft.com/en-us/dotnet/csharp/language-reference/builtin-types/built-in-types)（char，bool，byte，short，int，long，float，double，decimal，str / string，obj / object，[datetime](https://learn.microsoft.com/en-us/dotnet/api/system.datetime.-ctor?view=net-9.0)，sbyte，ushort，uint，ulong）  
+  UnityBasic Types（[vec2 / vector2](https://docs.unity3d.com/ScriptReference/Vector2-ctor.html)，[vec3 / vector3](https://docs.unity3d.com/ScriptReference/Vector3-ctor.html)，[vec4 / vector4](https://docs.unity3d.com/ScriptReference/Vector4-ctor.html)，[vec2int / vector2int](https://docs.unity3d.com/ScriptReference/Vector2Int-ctor.html)，[vec3int / vector3int](https://docs.unity3d.com/ScriptReference/Vector3Int.html)，[quat / quaternion](https://docs.unity3d.com/ScriptReference/Quaternion-ctor.html)，[color](https://docs.unity3d.com/ScriptReference/Color.html)，[color32](https://docs.unity3d.com/ScriptReference/Color32.html)）  
 
 Excel Example (**id** is a unique index, value type, must be added!):  
 
@@ -84,7 +84,7 @@ Excel Example:
     * Enables one-click switching of configuration table variants, thereby supporting multi-language/multi-version configurations
 
 Excel Example:  
-(Optional parameters: int type (default), Flags attribute, cross-sheet access: Sheet1.name)
+(Optional parameters: int type (default), Flags attribute, can cross-sheet access: Sheet1.name)
 
 | enum<name,int,Flags>{Value1 = 1,Value2 = 2,Value3 = 4,Value4 = 8,} | enum<Sheet1.name> | enum<Status,long>{OK = 200,Success = 200,Created = 201,Accepted = 202,} |
 |--------------------------------------------------------------------|-------------------|-------------------------------------------------------------------------|
@@ -97,6 +97,9 @@ Excel Example:
 ```C#
 // Set variant name
 FF8.Config.VariantName = "English";
+
+// Set a single sheet variant name (higher priority)
+Sheet1.VariantName = "English";
 ```
 | string | variant<desc,English> | variant<desc,Korean> | int    | variant<attack,English> | variant<attack,Korean> |
 |--------|-----------------------|----------------------|--------|-------------------------|------------------------|
@@ -106,7 +109,11 @@ FF8.Config.VariantName = "English";
 | 中文3    | Chinese 3             | 중국어 3                | 1000    | 800                     | 300                    |
 | 中文4    | Chinese 4             | 중국어 4                | 1000    | 800                     | 300                    |
 
-(You can extend other types: [ReadExcel.cs](https://github.com/TippingGame/F8Framework/blob/main/Runtime/ExcelTool/ReadExcel.cs))
+(You can extend other types: [ReadExcel.cs](https://github.com/TippingGame/F8Framework/blob/main/Runtime/ExcelTool/ReadExcel.cs))  
+
+* Additional Notes:
+  * To skip an entire row: Leave `id` blank
+  * To skip an entire column: Leave `type` or `name` blank
 
 ## Usage Examples
 
@@ -169,7 +176,7 @@ I18N.Other.dll\
 I18N.Rare.dll\
 I18N.West.dll\
 [ICSharpCode.SharpZipLib.dll](https://github.com/icsharpcode/SharpZipLib)  
-[LitJson.dll](https://github.com/LitJSON/litjson) (The dictionary key has been modified to support all basic and enumeration types; added support for commonly used Unity types: Type, Vector2, Vector3, Vector4, Quaternion, GameObject, Transform, Color, Color32, Bounds, Rect, RectOffset, LayerMask, Vector2Int, Vector3Int, RangeInt, BoundsInt; fixed the DateTime precision loss issue)
+[LitJson.dll](https://github.com/LitJSON/litjson) (The dictionary key has been modified to support all basic and enumeration types; added support for commonly used Unity types: Type, Vector2, Vector3, Vector4, Quaternion, GameObject, Transform, Color, Color32, Bounds, Rect, RectOffset, LayerMask, Vector2Int, Vector3Int, RangeInt, BoundsInt; fixed the DateTime precision loss issue; Fix the issue of long error)
 
 ## Writing to Excel (Optional)
 Use [EPPlus.dll (built-in) ](https://github.com/TippingGame/F8Framework/blob/main/Plugins/EPPlus.dll)(disabled by default; manually select the compilation platform):

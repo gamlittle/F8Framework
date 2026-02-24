@@ -555,6 +555,10 @@ namespace F8Framework.Core.Editor
                     }
                     else
                     {
+                        if (data.Name.IsNullOrEmpty())
+                        {
+                            continue;
+                        }
                         FieldInfo info = temp.GetField(data.Name);
                         if (data.IsKey)
                         {
