@@ -47,14 +47,16 @@ namespace F8Framework.Core
         public const string USHORT = "ushort";
         public const string UINT = "uint";
         public const string ULONG = "ulong";
-
+        public const string MATRIX4X4 = "matrix4x4";
+        
         // 容器类型
         public const string ARRAY = "[]";
         public const string LIST = "list<";
         public const string DICTIONARY = "dict<";
         public const string DICTIONARYFULL = "dictionary<";
         public const string VALUETUPLE = "valuetuple<";
-
+        public const string HASHSET = "hashset<";
+        
         // 特殊类型
         public const string ENUM = "enum<";
         public const string VARIANT = "variant<";
@@ -65,11 +67,11 @@ namespace F8Framework.Core
         private const string CODE_NAMESPACE = "F8Framework.F8ExcelDataClass"; //由表生成的数据类型均在此命名空间内
         private string ExcelPath = "config"; //需要导表的目录
         private Dictionary<string, List<ConfigData[]>> dataDict; //存放所有数据表内的数据，key：类名  value：数据
-
-        public void LoadAllExcelData()
+        
+        public void LoadAllExcelData(Dictionary<string, object> excelData = null)
         {
 #if UNITY_EDITOR
-            string INPUT_PATH = URLSetting.AddRootPath(F8EditorPrefs.GetString("ExcelPath", null)) ?? URLSetting.CS_STREAMINGASSETS_URL + ExcelPath;
+        string INPUT_PATH = URLSetting.AddRootPath(F8EditorPrefs.GetString("ExcelPath", null)) ?? URLSetting.CS_STREAMINGASSETS_URL + ExcelPath;
 #elif UNITY_STANDALONE
         string INPUT_PATH = URLSetting.CS_STREAMINGASSETS_URL + ExcelPath;
 #elif UNITY_ANDROID
@@ -87,7 +89,7 @@ namespace F8Framework.Core
             {
                 throw new Exception("请先设置数据表路径！");
             }
-
+            
 #if !UNITY_EDITOR && UNITY_ANDROID
             var files = SyncStreamingAssetsLoader.Instance.ReadAllLines(INPUT_PATH + "/fileindex.txt");
 #else
@@ -115,7 +117,7 @@ namespace F8Framework.Core
                 step++;
                 GetExcelData(item);
             }
-
+            
 #if !UNITY_EDITOR && UNITY_ANDROID
             SyncStreamingAssetsLoader.Instance.Close();
 #endif
@@ -130,12 +132,22 @@ namespace F8Framework.Core
                 object container = assembly.CreateInstance(CODE_NAMESPACE + "." + each.Key);
                 //序列化数据
                 Serialize(container, temp, each.Value);
-                objs.Add(each.Key, container);
+                if (excelData == null)
+                {
+                    objs.Add(each.Key, container);
+                }
+                else
+                {
+                    excelData.Add(each.Key, container);
+                }
             }
-            string _class = "F8DataManager";
-            string method = "RuntimeLoadAll";
-            object[] parameters = new object[] { objs };
-            Util.Assembly.InvokeMethod(_class, method, parameters);
+            if (excelData == null)
+            {
+                string _class = "F8DataManager";
+                string method= "RuntimeLoadAll";
+                object[] parameters = new object[] { objs };
+                Util.Assembly.InvokeMethod(_class, method, "EditorInstance", parameters);
+            }
             LogF8.LogConfig("<color=green>运行时导表成功！</color>");
         }
 
@@ -145,7 +157,6 @@ namespace F8Framework.Core
             public string Type; //数据类型
             public string Name; //字段名
             public string Data; //数据值
-            public bool IsKey;  // 是否是关键字
             public VariantData VariantInfo; //变体信息
         }
 
@@ -224,20 +235,20 @@ namespace F8Framework.Core
                             }
 
                             configDataList.Clear();
-
+                            
                             for (int j = 0; j < datas.Length; ++j)
                             {
                                 if (string.IsNullOrEmpty(types[j]))
                                     continue; //空的数据不处理
-
+                                
                                 ConfigData data = new ConfigData();
                                 data.Type = types[j];
                                 data.Name = names[j];
                                 data.Data = datas[j];
-
+                                
                                 configDataList.Add(data);
                             }
-
+                            
                             VariantInfoDict(ref configDataList);
 
                             dataList.Add(configDataList.ToArray());
@@ -286,7 +297,7 @@ namespace F8Framework.Core
                 if (string.IsNullOrEmpty(configDatas[i].Type) ||
                     !configDatas[i].Type.StartsWith(SupportType.VARIANT) ||
                     !configDatas[i].Type.EndsWith(">")) continue;
-
+                
                 // 解析变体类型，如 variant<name,english>
                 string innerContent = configDatas[i].Type.Substring(
                     SupportType.VARIANT.Length,
@@ -294,7 +305,7 @@ namespace F8Framework.Core
                 string[] variantParts = innerContent.Split(',');
 
                 if (variantParts.Length < 2) continue;
-
+                    
                 string variantName = variantParts[1].Trim();
                 string baseFieldName = variantParts[0].Trim();
 
@@ -308,13 +319,13 @@ namespace F8Framework.Core
                 for (int j = 0; j < configDatas.Count; j++)
                 {
                     if (i == j || configDatas[j].Name != baseFieldName) continue;
-
+                    
                     configDatas[j].VariantInfo ??= new VariantData
                     {
                         HasVariant = true,
                         Variants = new Dictionary<string, string>()
                     };
-
+                                
                     configDatas[j].VariantInfo.Variants ??= new Dictionary<string, string>();
 
                     configDatas[j].VariantInfo.Variants.TryAdd("", configDatas[j].Data);
@@ -326,14 +337,14 @@ namespace F8Framework.Core
         }
 
         //序列化对象
-        private static void Serialize(object container, Type temp, List<ConfigData[]> dataList)
+        private void Serialize(object container, Type temp, List<ConfigData[]> dataList)
         {
             //设置数据
             foreach (ConfigData[] datas in dataList)
             {
                 //Type.FullName 获取该类型的完全限定名称，包括其命名空间，但不包括程序集。
                 object t = temp.Assembly.CreateInstance(temp.FullName);
-
+                
                 foreach (ConfigData data in datas)
                 {
                     if (data.VariantInfo != null)
@@ -342,9 +353,9 @@ namespace F8Framework.Core
                             ? "_" + data.Name + "Variants"
                             : data.Name;
                         FieldInfo variantDictField = temp.GetField(name, BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
-
+                        
                         if (variantDictField == null) continue;
-
+                        
                         object variantDict = variantDictField.GetValue(t);
 
                         foreach (var variantData in data.VariantInfo.Variants)
@@ -352,7 +363,7 @@ namespace F8Framework.Core
                             object variantValue = ParseValue(data.Type, variantData.Value, temp.Name);
                             variantDict.GetType().GetMethod("Add").Invoke(variantDict, new object[] { variantData.Key, variantValue });
                         }
-
+                        
                         variantDictField.SetValue(t, variantDict);
                     }
                     else
@@ -369,7 +380,7 @@ namespace F8Framework.Core
                         }
                     }
                 }
-
+                
                 // FieldInfo.GetValue 获取对象内指定名称的字段的值
                 FieldInfo fieldInfoId = null;
                 PropertyInfo propertyInfoId = null;
@@ -416,7 +427,7 @@ namespace F8Framework.Core
         {
             LogF8.LogError(string.Format("数据类型错误，类型：{0}  数据：{1}  类名：{2}", type, data, classname));
         }
-
+        
         public static object ParseValue(string type, string data, string classname)
         {
             object o = null;
@@ -451,7 +462,7 @@ namespace F8Framework.Core
                     {
                         list.Add(ParseValue(innerType, elements[i], classname));
                     }
-
+                    
                     o = list;
                 }
                 else if ((type.StartsWith(SupportType.DICTIONARY) || type.StartsWith(SupportType.DICTIONARYFULL)) && type.EndsWith(">"))
@@ -467,7 +478,7 @@ namespace F8Framework.Core
                     {
                         keyType = type.Substring(5, commaIndex - 5);
                     }
-                    else if (type.StartsWith(SupportType.DICTIONARYFULL))
+                    else if(type.StartsWith(SupportType.DICTIONARYFULL))
                     {
                         keyType = type.Substring(11, commaIndex - 11);
                     }
@@ -483,25 +494,42 @@ namespace F8Framework.Core
                         object value = ParseValue(valueType, elementsLength >= i + 2 ? elements[i + 1] : null, classname);
                         if (dictionary.Contains(key))
                         {
-                            LogF8.LogError("Dictionary 重复Key值：{0}  Value值：{1}  类型：{2}  数据：{3}  类名：{4}", key, value, type, data, classname);
+                            LogF8.LogError("Dictionary 重复Key值：{0}  Value值：{1}  类型：{2}  数据：{3}  类名：{4}",key, value, type, data, classname);
                         }
                         else
                         {
                             dictionary.Add(key, value);
                         }
                     }
-
+                    
                     o = dictionary;
+                }
+                else if (type.StartsWith(SupportType.HASHSET) && type.EndsWith(">"))
+                {
+                    string innerType = type.Substring(8, type.Length - 9);
+                    data = RemoveOuterBracketsIfPaired(data); // 移除最外层的 '[' 和 ']' '{' 和 '}'
+                    var elements = ParseElements(data).ToArray();
+                    int elementsLength = elements.Length;
+                    Type elementType = SystemGetType(GetTrueType(innerType, classname, "", false));
+                    object set = Activator.CreateInstance(typeof(HashSet<>).MakeGenericType(elementType), elementsLength);
+                    MethodInfo addMethod = set.GetType().GetMethod("Add");
+    
+                    for (int i = 0; i < elementsLength; i++)
+                    {
+                        addMethod.Invoke(set, new[] { ParseValue(innerType, elements[i], classname) });
+                    }
+    
+                    o = set;
                 }
                 else if (type.StartsWith(SupportType.ENUM) && (type.EndsWith(">") || type.EndsWith("}")))
                 {
                     data = RemoveOuterBracketsIfPaired(data); // 移除最外层的 '[' 和 ']' '{' 和 '}'
-
+                    
                     string innerContent = type
                         .Split('<', '>')[1]  // 取 <...> 之间的部分
                         .Split(',')[0]       // 取第一个参数
                         .Trim();             // 移除前后空格
-
+                    
                     string fullEnumTypeName;
                     if (innerContent.Contains('.'))
                     {
@@ -512,9 +540,9 @@ namespace F8Framework.Core
                     {
                         fullEnumTypeName = $"{CODE_NAMESPACE}.{classname.Substring(0, classname.Length - 4)}+{innerContent},{CODE_NAMESPACE}";
                     }
-
+                    
                     Type enumType = Type.GetType(fullEnumTypeName);
-
+                    
                     if (enumType == null || !enumType.IsEnum)
                     {
                         throw new Exception($"枚举类型不存在，请检查定义！尝试加载的类型名: {fullEnumTypeName}");
@@ -548,28 +576,28 @@ namespace F8Framework.Core
                 else if (type.StartsWith(SupportType.VALUETUPLE) && type.EndsWith(">"))
                 {
                     data = RemoveOuterBracketsIfPaired(data);
-
+                    
                     string tupleTypeString = type.Substring(SupportType.VALUETUPLE.Length, type.Length - SupportType.VALUETUPLE.Length - 1);
                     string[] typeArgs = ParseElements(tupleTypeString, '<', '>').ToArray();
-
+                    
                     if (typeArgs.Length < 1 || typeArgs.Length > 7)
                         throw new NotSupportedException($"限制值元组长度最大为7: {typeArgs.Length}");
-
+                    
                     var elements = ParseElements(data).ToArray();
-
+                    
                     Type[] genericTypes = typeArgs.Select(t => SystemGetType(GetTrueType(t, classname, "", false))).ToArray();
                     object[] values = new object[typeArgs.Length];
-
+                    
                     for (int i = 0; i < typeArgs.Length; i++)
                     {
                         values[i] = ParseValue(typeArgs[i], elements.Length > i ? elements[i] : "", classname);
                     }
-
+                    
                     Type tupleType = Type.GetType($"System.ValueTuple`{typeArgs.Length}")?.MakeGenericType(genericTypes);
-
+    
                     if (tupleType == null)
                         throw new InvalidOperationException("无法创建值元组类型");
-
+                    
                     o = Activator.CreateInstance(tupleType, values);
                 }
                 else
@@ -590,7 +618,7 @@ namespace F8Framework.Core
                             string trueString = "true";
                             string trueString2 = "1";
                             bool BOOL_bool = trueString.Equals(data, StringComparison.OrdinalIgnoreCase) || trueString2.Equals(data, StringComparison.OrdinalIgnoreCase);
-
+                            
                             o = BOOL_bool;
                             break;
                         case SupportType.BYTE:
@@ -690,13 +718,13 @@ namespace F8Framework.Core
                             else if (Regex.IsMatch(data, @"[.\eE]"))
                             {
                                 // 尝试解析为 float，检查是否存在精度丢失
-                                if (float.TryParse(data, NumberStyles.Float, CultureInfo.InvariantCulture, out float floatValue)
+                                if (float.TryParse(data, NumberStyles.Float, CultureInfo.InvariantCulture, out float floatValue) 
                                     && floatValue.ToString(NumberFormatInfo.InvariantInfo) == data)
                                 {
                                     o = floatValue;
                                 }
                                 // 尝试解析为 double
-                                else if (double.TryParse(data, NumberStyles.Float, CultureInfo.InvariantCulture, out double doubleValue)
+                                else if (double.TryParse(data, NumberStyles.Float, CultureInfo.InvariantCulture, out double doubleValue) 
                                          && doubleValue.ToString(NumberFormatInfo.InvariantInfo) == data)
                                 {
                                     o = doubleValue;
@@ -863,11 +891,11 @@ namespace F8Framework.Core
                                 o = DateTime.MinValue;
                                 break;
                             }
-
+                            
                             if (long.TryParse(data, out long timestamp))
                             {
                                 int length = data.Length;
-
+                                
                                 if (length >= 19) // 19位纳秒级时间戳
                                 {
                                     var epoch = new DateTimeOffset(1970, 1, 1, 0, 0, 0, TimeSpan.Zero);
@@ -891,13 +919,13 @@ namespace F8Framework.Core
                                     break;
                                 }
                             }
-
+                            
                             if (DateTime.TryParse(data, out DateTime defaultResult))
                             {
                                 o = defaultResult;
                                 break;
                             }
-
+                            
                             LogF8.LogError($"无法解析时间字符串: {data}");
                             o = DateTime.MinValue;
                             break;
@@ -945,6 +973,31 @@ namespace F8Framework.Core
 
                             o = ULONG_ulong;
                             break;
+                        case SupportType.MATRIX4X4:
+                            data = RemoveOuterBracketsIfPaired(data); // 移除最外层的 '[' 和 ']' '{' 和 '}'
+                            var matrix4x4 = Regex.Matches(data, "(?:\"(?:[^\"]|\"\")*\"|[^,]+)") //逗号分隔
+                                .Cast<Match>()
+                                .Select(m => m.Value)
+                                .ToArray();
+                            var matrix = new Matrix4x4();
+                            matrix.m00 = (float)ParseValue(SupportType.FLOAT, matrix4x4.Length >= 1 ? matrix4x4[0] : "0", classname);
+                            matrix.m10 = (float)ParseValue(SupportType.FLOAT, matrix4x4.Length >= 2 ? matrix4x4[1] : "0", classname);
+                            matrix.m20 = (float)ParseValue(SupportType.FLOAT, matrix4x4.Length >= 3 ? matrix4x4[2] : "0", classname);
+                            matrix.m30 = (float)ParseValue(SupportType.FLOAT, matrix4x4.Length >= 4 ? matrix4x4[3] : "0", classname);
+                            matrix.m01 = (float)ParseValue(SupportType.FLOAT, matrix4x4.Length >= 5 ? matrix4x4[4] : "0", classname);
+                            matrix.m11 = (float)ParseValue(SupportType.FLOAT, matrix4x4.Length >= 6 ? matrix4x4[5] : "0", classname);
+                            matrix.m21 = (float)ParseValue(SupportType.FLOAT, matrix4x4.Length >= 7 ? matrix4x4[6] : "0", classname);
+                            matrix.m31 = (float)ParseValue(SupportType.FLOAT, matrix4x4.Length >= 8 ? matrix4x4[7] : "0", classname);
+                            matrix.m02 = (float)ParseValue(SupportType.FLOAT, matrix4x4.Length >= 9 ? matrix4x4[8] : "0", classname);
+                            matrix.m12 = (float)ParseValue(SupportType.FLOAT, matrix4x4.Length >= 10 ? matrix4x4[9] : "0", classname);
+                            matrix.m22 = (float)ParseValue(SupportType.FLOAT, matrix4x4.Length >= 11 ? matrix4x4[10] : "0", classname);
+                            matrix.m32 = (float)ParseValue(SupportType.FLOAT, matrix4x4.Length >= 12 ? matrix4x4[11] : "0", classname);
+                            matrix.m03 = (float)ParseValue(SupportType.FLOAT, matrix4x4.Length >= 13 ? matrix4x4[12] : "0", classname);
+                            matrix.m13 = (float)ParseValue(SupportType.FLOAT, matrix4x4.Length >= 14 ? matrix4x4[13] : "0", classname);
+                            matrix.m23 = (float)ParseValue(SupportType.FLOAT, matrix4x4.Length >= 15 ? matrix4x4[14] : "0", classname);
+                            matrix.m33 = (float)ParseValue(SupportType.FLOAT, matrix4x4.Length >= 16 ? matrix4x4[15] : "0", classname);
+                            o = matrix;
+                            break;
                     }
                 }
             }
@@ -983,7 +1036,7 @@ namespace F8Framework.Core
                 return Type.GetType(type);
             }
         }
-
+        
         public static string GetTrueType(string type, string className = "", string inputPath = "", bool writtenForm = true, Dictionary<string, string> collectedTypes = null)
         {
             string result;
@@ -1031,7 +1084,7 @@ namespace F8Framework.Core
                 {
                     keyType = type.Substring(5, commaIndex - 5);
                 }
-                else if (type.StartsWith(SupportType.DICTIONARYFULL))
+                else if(type.StartsWith(SupportType.DICTIONARYFULL))
                 {
                     keyType = type.Substring(11, commaIndex - 11);
                 }
@@ -1047,6 +1100,21 @@ namespace F8Framework.Core
                     result = "System.Collections.Generic.Dictionary`2[[" + keyTypeName + "],[" + valueTypeName + "]]";
                 }
                 collectedTypes?.TryAdd(result, SupportType.DICTIONARY);
+                return result;
+            }
+            else if (type.StartsWith(SupportType.HASHSET) && type.EndsWith(">"))
+            {
+                string innerType = type.Substring(8, type.Length - 9);
+                if (writtenForm)
+                {
+                    result = "System.Collections.Generic.HashSet<" + GetTrueType(innerType, className, inputPath, writtenForm, collectedTypes) + ">";
+                }
+                else
+                {
+                    var assemblyQualifiedName = SystemGetType(GetTrueType(innerType, className, inputPath, writtenForm, collectedTypes)).AssemblyQualifiedName;
+                    result = "System.Collections.Generic.HashSet`1[[" + assemblyQualifiedName + "]]";
+                }
+                collectedTypes?.TryAdd(result, SupportType.HASHSET);
                 return result;
             }
             else if (type.StartsWith(SupportType.ENUM) && (type.EndsWith(">") || type.EndsWith("}")))
@@ -1088,7 +1156,7 @@ namespace F8Framework.Core
             {
                 string tupleTypeString = type.Substring(SupportType.VALUETUPLE.Length, type.Length - SupportType.VALUETUPLE.Length - 1);
                 string[] typeArgs = ParseElements(tupleTypeString, '<', '>').ToArray();
-
+                
                 if (writtenForm)
                 {
                     string processedTypeArgs = string.Join(",", typeArgs.Select(t => GetTrueType(t, className, inputPath, writtenForm, collectedTypes)));
@@ -1096,8 +1164,8 @@ namespace F8Framework.Core
                 }
                 else
                 {
-                    string processedTypeArgs = string.Join(",",
-                        typeArgs.Select(t =>
+                    string processedTypeArgs = string.Join(",", 
+                        typeArgs.Select(t => 
                             $"[{SystemGetType(GetTrueType(t, className, inputPath, writtenForm, collectedTypes)).AssemblyQualifiedName}]"
                         )
                     );
@@ -1111,7 +1179,7 @@ namespace F8Framework.Core
                 return ParseType(type, className, inputPath);
             }
         }
-
+        
         private static string ParseType(string type, string className, string inputPath)
         {
             switch (type)
@@ -1188,13 +1256,16 @@ namespace F8Framework.Core
                 case SupportType.ULONG:
                     type = "System.UInt64";
                     break;
+                case SupportType.MATRIX4X4:
+                    type = "UnityEngine.Matrix4x4";
+                    break;
                 default:
                     throw new Exception("输入了错误的数据类型:  " + type + ", 类名:  " + className + ", 位于:  " + inputPath);
             }
 
             return type;
         }
-
+        
         private static string RemoveOuterBracketsIfPaired(string data)
         {
             if (string.IsNullOrEmpty(data))
@@ -1243,7 +1314,7 @@ namespace F8Framework.Core
 
             return data;
         }
-
+        
         private static List<string> ParseElements(string data, char leftBracket = '[', char rightBracket = ']')
         {
             List<string> elements = new List<string>();

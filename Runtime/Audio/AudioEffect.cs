@@ -19,10 +19,10 @@ namespace F8Framework.Core
         private float maxPitch = 1.2f;
         private GameObject OneShotAudio;
         
-        public AudioEffect()
+        public AudioEffect(Transform transform)
         {
-            OneShotAudio = new GameObject("AudioEffect3D", typeof (AudioSource));
-            Object.DontDestroyOnLoad(OneShotAudio);
+            OneShotAudio = new GameObject("AudioEffect3D", typeof(AudioSource));
+            OneShotAudio.transform.SetParent(transform);
         }
         
         public void Load(string url, Vector3 position, float volume = 1f, float spatialBlend = 1f,
@@ -67,7 +67,7 @@ namespace F8Framework.Core
         public void PlayClipAtPoint(string url, AudioClip clip, Vector3 position, [DefaultValue("1.0F")] float volume, [DefaultValue("1.0F")] float spatialBlend,
             Action callback = null, AudioMixerGroup audioEffectMixerGroup = null, bool isRandom = false)
         {
-            GameObject gameObject = GameObjectPool.Instance.Spawn(OneShotAudio);
+            GameObject gameObject = GameObjectPool.Instance?.Spawn(OneShotAudio);
             gameObject.transform.position = position;
             AudioSource audioSource = gameObject.GetComponent<AudioSource>();
             audioSource.clip = clip;
@@ -80,9 +80,9 @@ namespace F8Framework.Core
             audioSource.Play();
             
             float time = clip.length * ((double)Time.timeScale < 0.009999999776482582 ? 0.01f : Time.timeScale);
-            TimerManager.Instance.AddTimer(this, 1f, time, 1, null, () =>
+            TimerManager.Instance?.AddTimer(this, 1f, time, 1, null, () =>
             {
-                GameObjectPool.Instance.Despawn(gameObject);
+                GameObjectPool.Instance?.Despawn(gameObject);
                 if (_effectsNum.TryGetValue(url, out int num))
                 {
                     _effectsNum[url] = num - 1;
@@ -96,7 +96,7 @@ namespace F8Framework.Core
         {
             foreach (var item in _effects)
             {
-                AssetManager.Instance.Unload(item.Key, unloadAllLoadedObjects);
+                AssetManager.Instance?.Unload(item.Key, unloadAllLoadedObjects);
             }
             _effects.Clear();
             _effectsNum.Clear();

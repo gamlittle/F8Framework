@@ -4,54 +4,144 @@
 [![Unity Version](https://img.shields.io/badge/unity-2021|2022|2023|6000-blue)](https://unity.com)
 [![Platform](https://img.shields.io/badge/platform-Win%20%7C%20Android%20%7C%20iOS%20%7C%20Mac%20%7C%20Linux%20%7C%20WebGL-orange)]()
 
-## Introduction (Simply press F8 to start game development without distractions)
-**Unity F8 StorageManager Component**  
-Local Data Storage & Loading & Encryption
+## Introduction
+`StorageManager` is used for local save/load workflows. It supports `PlayerPrefs`, file storage, and `Resources`, plus whole-file compression, field-level AES encryption, generic APIs, and common Unity types.
 
-## Plugin Installation (Requires Core Framework First)
-Note! Built into → F8Framework Core: https://github.com/TippingGame/F8Framework.git  
-Method 1: Download files directly and import to Unity  
-Method 2: Unity → Menu Bar → Window → Package Manager → "+" → Add Package from git URL → Enter: https://github.com/TippingGame/F8Framework.git
+## Installation
+Built into F8Framework Core:  
+https://github.com/TippingGame/F8Framework.git
 
-### Code Examples
-```C#
-public class ClassInfo
+Import options:
+- Download the project and import it into Unity
+- `Unity -> Window -> Package Manager -> + -> Add Package from git URL`
+
+## Features
+- Supports `PlayerPrefs`, `File`, and `Resources`
+- Supports `Location`, `Directory`, `DefaultFilePath`, and `Compression`
+- Supports `None` and `Gzip`
+- Supports field-level AES encryption
+- Supports primitive types, `Enum`, and `ValueTuple`
+- Supports `Array`, `List`, `Dictionary`, `Queue`, `HashSet`, and `Stack`
+- Supports rectangular arrays and jagged arrays
+- Supports common Unity types:
+  - `Vector2`, `Vector3`, `Vector4`
+  - `Vector2Int`, `Vector3Int`
+  - `Quaternion`
+  - `Color`, `Color32`
+  - `Matrix4x4`
+  - `Bounds`, `Rect`, `RectOffset`
+  - `LayerMask`
+- `Remove`, `Save`, and `Clear` can use a temporary file path
+
+## Quick Start
+```csharp
+FF8.Storage.Configure(new StorageManager.Settings
 {
-    public string Initial = "initial";
-}
+    location = StorageManager.Location.File,
+    directory = StorageManager.Directory.PersistentDataPath,
+    defaultFilePath = "Save/PlayerData.json",
+    compressionType = StorageManager.CompressionType.Gzip,
+    encryption = new Util.OptimizedAES(key: "AES_Key", iv: null)
+});
 
-public ClassInfo Info = new ClassInfo();
+FF8.Storage.SetUser("User_10001");
 
-void Start()
+FF8.Storage.SetInt("coins", 2560);
+
+FF8.Storage.Save();
+```
+
+## Code Example
+```csharp
+using System;
+using System.Collections.Generic;
+using F8Framework.Core;
+using UnityEngine;
+
+public class DemoStorage : MonoBehaviour
 {
-    // Set encryption key, automatically encrypt all data (not encrypted in editor)
-    // iv = null means using random IV
-    FF8.Storage.SetEncrypt(new Util.OptimizedAES(key: "AES_Key", iv: null));
-    
-    // Set UserId, user's private key
-    FF8.Storage.SetUser("12345");
-    
-    // Use basic types
-    FF8.Storage.SetString("Key1", "value", user: true);
-    FF8.Storage.GetString("Key1", "", user: true);
-    
-    FF8.Storage.SetInt("Key2", 1);
-    FF8.Storage.GetInt("Key2");
-    
-    FF8.Storage.SetBool("Key3", true);
-    FF8.Storage.GetBool("Key3");
-    
-    FF8.Storage.SetFloat("Key4", 1.1f);
-    FF8.Storage.GetFloat("Key4");
+    [Serializable]
+    public class SaveProfile
+    {
+        public string Name;
+        public int Level;
+        public List<int> OwnedItems;
+    }
 
-    // Using data classes
-    FF8.Storage.SetObject("Key5", Info);
-    ClassInfo info2 = FF8.Storage.GetObject<ClassInfo>("Key5");
-    LogF8.Log(info2.Initial);
+    public enum SaveMode
+    {
+        Casual = 1,
+        Hardcore = 2
+    }
 
-    FF8.Storage.Save();
-    FF8.Storage.Clear();
+    void Start()
+    {
+        FF8.Storage.Configure(new StorageManager.Settings
+        {
+            location = StorageManager.Location.File,
+            directory = StorageManager.Directory.PersistentDataPath,
+            defaultFilePath = "Save/PlayerData.json",
+            compressionType = StorageManager.CompressionType.Gzip,
+            encryption = new Util.OptimizedAES(key: "AES_Key", iv: null)
+        });
+
+        FF8.Storage.SetString("nickname", "F8Player", user: true);
+        FF8.Storage.SetInt("coins", 2560);
+        FF8.Storage.SetBool("guide_finished", true);
+        FF8.Storage.SetEnum("save_mode", SaveMode.Hardcore);
+
+        FF8.Storage.SetObject("profile", new SaveProfile
+        {
+            Name = "Knight",
+            Level = 18,
+            OwnedItems = new List<int> { 1001, 1002, 1003 }
+        });
+
+        FF8.Storage.Set("int_array", new[] { 1, 2, 3, 4 });
+        FF8.Storage.SetDictionary("map", new Dictionary<int, string> { { 1, "one" }, { 2, "two" } });
+        FF8.Storage.SetQueue("queue", new Queue<int>(new[] { 10, 20, 30 }));
+        FF8.Storage.SetValueTuple("tuple7", (1, 2, 3, 4, 5, 6, 7));
+
+        FF8.Storage.SetVector3("player_pos", new Vector3(3f, 4f, 5f));
+        FF8.Storage.SetQuaternion("player_rot", Quaternion.Euler(15f, 30f, 45f));
+        FF8.Storage.SetBounds("spawn_bounds", new Bounds(Vector3.zero, Vector3.one * 2));
+        FF8.Storage.SetRect("ui_rect", new Rect(5f, 10f, 100f, 50f));
+        FF8.Storage.SetLayerMask("enemy_layer", (LayerMask)(1 << 8));
+
+        string nickname = FF8.Storage.GetString("nickname", user: true);
+        SaveProfile profile = FF8.Storage.GetObject<SaveProfile>("profile");
+        Vector3 playerPos = FF8.Storage.GetVector3("player_pos");
+        Bounds spawnBounds = FF8.Storage.GetBounds("spawn_bounds");
+
+        FF8.Storage.Save();
+    }
 }
 ```
 
+Full sample source:
+- `Assets/F8Framework/Tests/Storage/DemoStorage.cs`
 
+## Common APIs
+- Primitive types: `SetString/GetString`, `SetInt/GetInt`, `SetFloat/GetFloat`, `SetBool/GetBool`
+- Extended numeric types: `SetChar`, `SetByte`, `SetShort`, `SetLong`, `SetDouble`, `SetDecimal`
+- Enum: `SetEnum<TEnum>`, `GetEnum<TEnum>`
+- Tuple: `SetValueTuple`, `GetValueTuple`
+- Collections: `SetList/GetList`, `SetDictionary/GetDictionary`, `SetQueue/GetQueue`, `SetStack/GetStack`
+- Unity types: `SetVector3/GetVector3`, `SetBounds/GetBounds`, `SetRect/GetRect`
+- Generic APIs: `Set<T>`, `Get<T>`
+
+## Path Formats
+Supported file path formats:
+- `"PlayerData.json"`
+- `"Save/PlayerData.json"`
+- `"C:/Users/User/Save/PlayerData.json"`
+
+When using `Location.File`:
+- `Directory.PersistentDataPath` uses `Application.persistentDataPath`
+- `Directory.DataPath` uses `Application.dataPath`
+
+## Notes
+- `Resources` mode is read-only at runtime
+- When encryption is enabled, storage keys are MD5-hashed
+- In file mode, data is cached in memory first and written to disk on `Save()`
+- `OnTermination()` automatically calls `Save()`

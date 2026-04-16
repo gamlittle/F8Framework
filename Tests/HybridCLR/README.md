@@ -13,10 +13,10 @@
 
 ## 简介（希望自己点击F8，就能开始制作游戏，不想多余的事）
 接入HybridCLR热更新代码组件。
-1. 使用这个[ 官方教程（快速上手） ](https://hybridclr.doc.code-philosophy.com/docs/beginner/quickstart)创建HotUpdate程序集后。  
+1. 使用这个[ 官方教程（快速上手） ](https://www.hybridclr.cn/docs/beginner/quickstart)创建HotUpdate程序集后。  
 2. 找到代码[ F8Helper.cs ](https://github.com/TippingGame/F8Framework/blob/main/Editor/F8Helper/F8Helper.cs)  
 	* 解除注释状态，如下代码  
-3. 补充元数据，具体看[ 官方教程（使用泛型） ](https://hybridclr.doc.code-philosophy.com/docs/beginner/generic)
+3. 补充元数据，具体看[ 官方教程（使用泛型） ](https://www.hybridclr.cn/docs/beginner/generic)
 
 ```C#
 // 补充元数据，不会热更新此处的dll，一般在{project}/HybridCLRData/AssembliesPostIl2CppStrip/{target}目录下
@@ -33,29 +33,37 @@ public static List<string> AOTDllList = new List<string>
 [MenuItem("开发工具/3: 生成并复制热更新Dll-F8", false, 210)]
 public static void GenerateCopyHotUpdateDll()
 {
-    // F8EditorPrefs.SetBool("compilationFinishedHotUpdateDll", false);
+    // SessionState.SetBool("compilationFinishedHotUpdateDll", false);
+    //
+    // // 只使用HybridCLR执行的命令（二选一）
     // HybridCLR.Editor.Commands.PrebuildCommand.GenerateAll();
+    // // 使用HybridCLR的同时也使用Obfuz执行的命令（二选一）
+    // // Obfuz4HybridCLR.PrebuildCommandExt.GenerateAll();
     //
     // string outpath = Application.dataPath + "/AssetBundles/Code/";
     //
     // FileTools.SafeClearDir(outpath);
     // FileTools.CheckDirAndCreateWhenNeeded(outpath);
-    // foreach (var dll in HybridCLR.Editor.SettingsUtil.HotUpdateAssemblyNamesExcludePreserved) // 获取HybridCLR设置面板的dll名称
+    // foreach (var dll in HybridCLR.Editor.SettingsUtil.HotUpdateAssemblyNamesIncludePreserved) // 获取HybridCLR设置面板的dll名称
     // {
-    //     var path =
-    //         HybridCLR.Editor.SettingsUtil.GetHotUpdateDllsOutputDirByTarget(EditorUserBuildSettings
-    //             .activeBuildTarget) + "/" + dll + ".dll";
-    //     FileTools.SafeCopyFile(
-    //         HybridCLR.Editor.SettingsUtil.GetHotUpdateDllsOutputDirByTarget(EditorUserBuildSettings.activeBuildTarget) + "/" + dll + ".dll",
-    //         outpath + dll + ".bytes");
+    //     var path = HybridCLR.Editor.SettingsUtil.GetHotUpdateDllsOutputDirByTarget(
+    //         EditorUserBuildSettings.activeBuildTarget) + "/" + dll + ".dll";
+    //
+    //     // 使用HybridCLR的同时也使用Obfuz解除注释
+    //     // if (Obfuz.Settings.ObfuzSettings.Instance.assemblySettings.GetObfuscationRelativeAssemblyNames().Contains(dll))
+    //     // {
+    //     //     path = Obfuz4HybridCLR.PrebuildCommandExt.GetObfuscatedHotUpdateAssemblyOutputPath(
+    //     //         EditorUserBuildSettings.activeBuildTarget) + "/" + dll + ".dll";
+    //     // }
+    //     
+    //     FileTools.SafeCopyFile(path, outpath + dll + ".bytes");
     //     LogF8.LogAsset("生成并复制热更新dll：" + dll);
     // }
     //
     // foreach (var aotDllName in F8Helper.AOTDllList)
     // {
-    //     var mscorlibsouPath =
-    //         HybridCLR.Editor.SettingsUtil.GetAssembliesPostIl2CppStripDir(EditorUserBuildSettings
-    //             .activeBuildTarget) + "/" + aotDllName;
+    //     var mscorlibsouPath = HybridCLR.Editor.SettingsUtil.GetAssembliesPostIl2CppStripDir(
+    //         EditorUserBuildSettings.activeBuildTarget) + "/" + aotDllName;
     //     
     //     FileTools.SafeCopyFile(
     //         mscorlibsouPath,
@@ -93,6 +101,7 @@ public class LoadDll : MonoBehaviour
         HotUpdateManager HotUpdate = ModuleCenter.CreateModule<HotUpdateManager>();
         DownloadManager DownloadManager = ModuleCenter.CreateModule<DownloadManager>();
         AssetManager AssetManager = ModuleCenter.CreateModule<AssetManager>();
+        yield return AssetBundleManager.Instance.LoadAssetBundleManifest();
         
         // 初始化本地版本
         HotUpdate.InitLocalVersion();
@@ -104,12 +113,10 @@ public class LoadDll : MonoBehaviour
         yield return HotUpdate.InitAssetVersion();
             
         // 检查需要热更的资源，总大小
-        Tuple<Dictionary<string, string>, long> result  = HotUpdate.CheckHotUpdate();
-        var hotUpdateAssetUrl = result.Item1;
-        var allSize = result.Item2;
+        var (downloadInfos, allSize) = HotUpdate.CheckHotUpdate();
         
         // 资源热更新
-        HotUpdate.StartHotUpdate(hotUpdateAssetUrl, () =>
+        HotUpdate.StartHotUpdate(downloadInfos, () =>
         {
             LogF8.Log("完成");
             // 先补充元数据（可选）
@@ -147,27 +154,33 @@ public class LoadDll : MonoBehaviour
         }, () =>
         {
             LogF8.Log("失败");
-        }, progress =>
+        }, eventArgs =>
         {
-            LogF8.Log("进度：" + progress);
+            long downloadedBytes = eventArgs.TotalDownloadedLength;
+            double speedBytesPerSecond = eventArgs.DownloadInfo.DownloadedLength / eventArgs.DownloadInfo.DownloadTimeSpan.TotalSeconds;
+            LogF8.Log($"进度：{downloadedBytes}B/{allSize}B, 速度：{speedBytesPerSecond}B/s");
         });
     }
     void Update()
     {
-        // 更新模块
+        // 更新模块，切勿多处调用
         ModuleCenter.Update();
     }
 
     void LateUpdate()
     {
-        // 更新模块
+        // 更新模块，切勿多处调用
         ModuleCenter.LateUpdate();
     }
 
     void FixedUpdate()
     {
-        // 更新模块
+        // 更新模块，切勿多处调用
         ModuleCenter.FixedUpdate();
     }
 }
 ```
+### 常见问题：
+1. 打包HybridCLR，用时很久，可在第一次执行后，改为这个API：`HybridCLR.Editor.Commands.CompileDllCommand.CompileDll(EditorUserBuildSettings.activeBuildTarget);`
+    * 启用了Obfuz，可以改为这个API：`Obfuz4HybridCLR.PrebuildCommandExt.CompileAndObfuscateDll();`
+    * [参考文档（与HybridCLR协同工作）](https://www.obfuz.com/docs/manual/hybridclr/work-with-hybridclr)

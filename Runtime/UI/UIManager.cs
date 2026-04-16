@@ -191,7 +191,11 @@ namespace F8Framework.Core
                 LogF8.LogView("场景中缺少：EventSystem 组件，已自动添加");
                 GameObject eventSystem = new GameObject("EventSystem");
                 eventSystem.AddComponent<EventSystem>();
+#if ENABLE_INPUT_SYSTEM
+                eventSystem.AddComponent<UnityEngine.InputSystem.UI.InputSystemUIInputModule>();
+#elif ENABLE_LEGACY_INPUT_MANAGER
                 eventSystem.AddComponent<StandaloneInputModule>();
+#endif
                 eventSystem.SetParent(transform);
             }
         }
@@ -213,6 +217,16 @@ namespace F8Framework.Core
 
         public void OnTermination()
         {
+            Clear(true);
+            CurrentUIs.Clear();
+            _layers?.Clear();
+            _layerGame = null;
+            _layerUI = null;
+            _layerPopUp = null;
+            _layerDialog = null;
+            _layerNotify = null;
+            _layerGuide = null;
+            _layers = null;
             Destroy(gameObject);
         }
         
@@ -480,11 +494,12 @@ namespace F8Framework.Core
         
         public void Clear(bool isDestroy = true)
         {
-            _layerGame.Clear(isDestroy);
-            _layerUI.Clear(isDestroy);
-            _layerPopUp.Clear(isDestroy);
-            _layerDialog.Clear(isDestroy);
-            _layerGuide.Clear(isDestroy);
+            _layerGame?.Clear(isDestroy);
+            _layerUI?.Clear(isDestroy);
+            _layerPopUp?.Clear(isDestroy);
+            _layerDialog?.Clear(isDestroy);
+            _layerNotify?.Clear(isDestroy);
+            _layerGuide?.Clear(isDestroy);
         }
         
         public void Clear(LayerType layerType, bool isDestroy = false)

@@ -78,16 +78,16 @@ namespace F8Framework.Core
             AudioMusicAudioEffect.MusicSource.playOnAwake = false;
             AudioMusicAudioEffect.MusicSource.loop = false;
             
-            _audioMusicAudioEffect3D = new AudioEffect();
+            _audioMusicAudioEffect3D = new AudioEffect(transform);
 
-            _volumeMusic = StorageManager.Instance.GetFloat(_volumeMusicKey, 1f);
-            _switchMusic = StorageManager.Instance.GetBool(_switchMusicKey, true);
+            _volumeMusic = PlayerPrefs.GetFloat(_volumeMusicKey, 1f);
+            _switchMusic = PlayerPrefs.GetInt(_switchMusicKey, 1) == 1;
             
-            _volumeVoice = StorageManager.Instance.GetFloat(_volumeVoiceKey, 1f);
-            _switchVoice = StorageManager.Instance.GetBool(_switchVoiceKey, true);
+            _volumeVoice = PlayerPrefs.GetFloat(_volumeVoiceKey, 1f);
+            _switchVoice = PlayerPrefs.GetInt(_switchVoiceKey, 1) == 1;
             
-            _volumeAudioEffect = StorageManager.Instance.GetFloat(_volumeAudioEffectKey, 1f);
-            _switchAudioEffect = StorageManager.Instance.GetBool(_switchAudioEffectKey, true);
+            _volumeAudioEffect = PlayerPrefs.GetFloat(_volumeAudioEffectKey, 1f);
+            _switchAudioEffect = PlayerPrefs.GetInt(_switchAudioEffectKey, 1) == 1;
         }
 
         /// <summary>
@@ -123,11 +123,23 @@ namespace F8Framework.Core
         public void OnTermination()
         {
             StopAll();
-            Tween.Instance.CancelTween(AudioMusic.AudioTween);
-            Tween.Instance.CancelTween(AudioMusicVoice.AudioTween);
-            Tween.Instance.CancelTween(AudioMusicBtnClick.AudioTween);
-            Tween.Instance.CancelTween(AudioMusicUISound.AudioTween);
-            Tween.Instance.CancelTween(AudioMusicAudioEffect.AudioTween);
+
+            Tween.Instance?.CancelTween(AudioMusic.AudioTween);
+            Tween.Instance?.CancelTween(AudioMusicVoice.AudioTween);
+            Tween.Instance?.CancelTween(AudioMusicBtnClick.AudioTween);
+            Tween.Instance?.CancelTween(AudioMusicUISound.AudioTween);
+            Tween.Instance?.CancelTween(AudioMusicAudioEffect.AudioTween);
+
+            UnloadAll(true);
+            _audioMusicAudioEffect3D = null;
+            _audioEffectMixerGroup = null;
+            _audioMixer = null;
+            _transform = null;
+            AudioMusic = null;
+            AudioMusicVoice = null;
+            AudioMusicBtnClick = null;
+            AudioMusicUISound = null;
+            AudioMusicAudioEffect = null;
             
             Destroy(gameObject);
         }
@@ -177,7 +189,7 @@ namespace F8Framework.Core
             set
             {
                 _volumeMusic = value;
-                StorageManager.Instance.SetFloat(_volumeMusicKey, value);
+                PlayerPrefs.SetFloat(_volumeMusicKey, value);
                 AudioMusic.MusicSource.volume = value;
             }
         }
@@ -195,7 +207,7 @@ namespace F8Framework.Core
             set
             {
                 _switchMusic = value;
-                StorageManager.Instance.SetBool(_switchMusicKey, value);
+                PlayerPrefs.SetInt(_switchMusicKey, value ? 1 : 0);
                 if (!value)
                 {
                     AudioMusic.MusicSource.Stop();
@@ -245,7 +257,7 @@ namespace F8Framework.Core
             set
             {
                 _volumeVoice = value;
-                StorageManager.Instance.SetFloat(_volumeVoiceKey, value);
+                PlayerPrefs.SetFloat(_volumeVoiceKey, value);
                 AudioMusicVoice.MusicSource.volume = value;
             }
         }
@@ -263,7 +275,7 @@ namespace F8Framework.Core
             set
             {
                 _switchVoice = value;
-                StorageManager.Instance.SetBool(_switchVoiceKey, value);
+                PlayerPrefs.SetInt(_switchVoiceKey, value ? 1 : 0);
                 if (!value)
                 {
                     AudioMusicVoice.MusicSource.Stop();
@@ -284,7 +296,7 @@ namespace F8Framework.Core
             set
             {
                 _volumeAudioEffect = value;
-                StorageManager.Instance.SetFloat(_volumeAudioEffectKey, value);
+                PlayerPrefs.SetFloat(_volumeAudioEffectKey, value);
                 AudioMusicBtnClick.MusicSource.volume = value;
                 AudioMusicUISound.MusicSource.volume = value;
                 AudioMusicAudioEffect.MusicSource.volume = value;
@@ -304,7 +316,7 @@ namespace F8Framework.Core
             set
             {
                 _switchAudioEffect = value;
-                StorageManager.Instance.SetBool(_switchAudioEffectKey, value);
+                PlayerPrefs.SetInt(_switchAudioEffectKey, value ? 1 : 0);
                 if (!value)
                 {
                     AudioMusicBtnClick.MusicSource.Stop();

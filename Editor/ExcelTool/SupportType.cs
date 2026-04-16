@@ -14,7 +14,6 @@ namespace F8Framework.Core.Editor
     {
         private string[] Names;
         private string[] Types;
-        private bool[] IsKeys;
         private List<ReadExcel.ConfigData> ConfigDatas;
         private string ClassName;
         private string InputPath;
@@ -26,7 +25,6 @@ namespace F8Framework.Core.Editor
             ClassName = className;
             Names = configDatas.Select(x => x.Name).ToArray();
             Types = configDatas.Select(x => x.Type).ToArray();
-            IsKeys = configDatas.Select(x => x.IsKey).ToArray();
             ConfigDatas = configDatas;
         }
 
@@ -49,16 +47,16 @@ namespace F8Framework.Core.Editor
                 .ToList();
             if (duplicates.Count > 0)
             {
-                throw new Exception("表名为：" + ClassName + "，字段名重复：" + string.Join("，", duplicates));
+                throw new Exception("表名为：" + ClassName + "，字段名重复：" + string.Join("，",  duplicates));
             }
-            return CreateCode(ClassName, Types, Names, IsKeys);
+            return CreateCode(ClassName, Types, Names);
         }
-
+        
         private string GetIdType()
         {
             for (int i = 0; i < Names.Length; i++)
             {
-                if (Names[i].Equals("id", StringComparison.OrdinalIgnoreCase) || IsKeys[i])
+                if (Names[i].Equals("id", StringComparison.OrdinalIgnoreCase))
                 {
                     return ReadExcel.GetTrueType(Types[i], ClassName, InputPath);
                 }
@@ -66,9 +64,9 @@ namespace F8Framework.Core.Editor
 
             return "int";
         }
-
+        
         //创建代码。   
-        private string CreateCode(string ClassName, string[] types, string[] fields, bool[] isKeys)
+        private string CreateCode(string ClassName, string[] types, string[] fields)
         {
             //生成类
             StringBuilder classSource = new StringBuilder();
@@ -82,6 +80,7 @@ namespace F8Framework.Core.Editor
             classSource.Append("using UnityEngine;\n\n");
             classSource.Append("namespace " + ExcelDataTool.CODE_NAMESPACE + "\n");
             classSource.Append("{\n");
+            classSource.Append("\t[Serializable]\n");
             classSource.Append("\tpublic class " + ClassName + "Item\n"); //表里每一条数据的类型名为表类型名加Item
             classSource.Append("\t{\n");
             enumSource.Clear();
@@ -111,7 +110,7 @@ namespace F8Framework.Core.Editor
                     // 普通字段
                     classSource.Append(PropertyString(types[i], fields[i], binaryRegisters));
                 }
-
+                
                 // 枚举定义
                 if (!string.IsNullOrEmpty(types[i]) && !string.IsNullOrEmpty(fields[i]))
                 {
@@ -123,12 +122,13 @@ namespace F8Framework.Core.Editor
 
             //生成Container
             classSource.Append("\t\n");
+            classSource.Append("\t[Serializable]\n");
             classSource.Append("\tpublic class " + ClassName + "\n");
             classSource.Append("\t{\n");
             string idType = "";
             for (int i = 0; i < fields.Length; i++)
             {
-                if (fields[i].Equals("id", StringComparison.OrdinalIgnoreCase) || isKeys[i])
+                if (fields[i].Equals("id", StringComparison.OrdinalIgnoreCase))
                 {
                     idType = ReadExcel.GetTrueType(types[i], ClassName, InputPath);
                     break;
@@ -156,8 +156,8 @@ namespace F8Framework.Core.Editor
                         string elementType = arrayType.EndsWith("[]") 
                             ? arrayType.Substring(0, arrayType.Length - 2) 
                             : arrayType;
-                        classSource.AppendLine(
-                            $"\t\t\tTypeHandlerFactory.PreRegister<{arrayType}>(new F8Framework.Core.ArrayHandler<{elementType}>());");
+                        classSource.Append(
+                            $"\t\t\tTypeHandlerFactory.PreRegister<{arrayType}>(new F8Framework.Core.ArrayHandler<{elementType}>());\n");
                     }
                     else if (item.Value == SupportType.LIST)
                     {
@@ -165,8 +165,8 @@ namespace F8Framework.Core.Editor
                         int start = listType.IndexOf('<') + 1;
                         int end = listType.LastIndexOf('>');
                         string elementType = listType.Substring(start, end - start);
-                        classSource.AppendLine(
-                            $"\t\t\tTypeHandlerFactory.PreRegister<{listType}>(new F8Framework.Core.ListHandler<{elementType}>());");
+                        classSource.Append(
+                            $"\t\t\tTypeHandlerFactory.PreRegister<{listType}>(new F8Framework.Core.ListHandler<{elementType}>());\n");
                     }
                     else if (item.Value == SupportType.DICTIONARY)
                     {
@@ -177,26 +177,35 @@ namespace F8Framework.Core.Editor
                         string[] parts = inner.Split(new char[] { ',' }, 2);
                         string keyType = parts[0].Trim();
                         string valueType = parts[1].Trim();
-                        classSource.AppendLine(
-                            $"\t\t\tTypeHandlerFactory.PreRegister<{dictType}>(new F8Framework.Core.DictionaryHandler<{keyType}, {valueType}>());");
+                        classSource.Append(
+                            $"\t\t\tTypeHandlerFactory.PreRegister<{dictType}>(new F8Framework.Core.DictionaryHandler<{keyType}, {valueType}>());\n");
+                    }
+                    else if (item.Value == SupportType.HASHSET)
+                    {
+                        string hashSetType = item.Key; // 例如 "HashSet<int>"
+                        int start = hashSetType.IndexOf('<') + 1;
+                        int end = hashSetType.LastIndexOf('>');
+                        string elementType = hashSetType.Substring(start, end - start);
+                        classSource.Append(
+                            $"\t\t\tTypeHandlerFactory.PreRegister<{hashSetType}>(new F8Framework.Core.HashSetHandler<{elementType}>());\n");
                     }
                     else if (item.Value == SupportType.ENUM)
                     {
                         string enumType = item.Key; // 例如 "Sheet11.MyEnum"
-                        classSource.AppendLine(
-                            $"\t\t\tTypeHandlerFactory.PreRegister<{enumType}>(new F8Framework.Core.EnumHandler<{enumType}>());");
+                        classSource.Append(
+                            $"\t\t\tTypeHandlerFactory.PreRegister<{enumType}>(new F8Framework.Core.EnumHandler<{enumType}>());\n");
                     }
                     else if (item.Value == SupportType.VALUETUPLE)
                     {
                         string tupleType = item.Key; // 例如 "ValueTuple<int, string>"
-                        classSource.AppendLine(
-                            $"\t\t\tTypeHandlerFactory.PreRegister<{tupleType}>(new F8Framework.Core.ValueTupleHandler<{tupleType}>());");
+                        classSource.Append(
+                            $"\t\t\tTypeHandlerFactory.PreRegister<{tupleType}>(new F8Framework.Core.ValueTupleHandler<{tupleType}>());\n");
                     }
                     else if (item.Value == SupportType.OBJ)
                     {
                         string classType = item.Key; // 自定义类
-                        classSource.AppendLine(
-                            $"\t\t\tTypeHandlerFactory.PreRegister<{classType}>(new F8Framework.Core.ObjectHandler<{classType}>());");
+                        classSource.Append(
+                            $"\t\t\tTypeHandlerFactory.PreRegister<{classType}>(new F8Framework.Core.ObjectHandler<{classType}>());\n");
                     }
                 }
             }
@@ -238,15 +247,15 @@ namespace F8Framework.Core.Editor
         {
             if (string.IsNullOrEmpty(type) || string.IsNullOrEmpty(propertyName))
                 return null;
-
+            
             type = ReadExcel.GetTrueType(type, ClassName, InputPath, true, binaryRegisters);
             if (!string.IsNullOrEmpty(type))
             {
                 StringBuilder sbProperty = new StringBuilder();
-
+                
                 sbProperty.Append("\t\t[Preserve]\n");
                 sbProperty.Append("\t\tpublic " + type + " " + propertyName + ";\n");
-
+                
                 return sbProperty.ToString();
             }
             else
@@ -323,13 +332,13 @@ namespace F8Framework.Core.Editor
 
             if (isFlags)
             {
-                sb.AppendLine("\t\t[System.Flags]");
+                sb.Append("\t\t[System.Flags]\n");
             }
 
-            sb.AppendLine("\t\t[Preserve]");
-
-            sb.Append("\t\tpublic enum ").Append(enumName).Append(" : ").Append(ReadExcel.GetTrueType(underlyingType, className, inputPath, writtenForm)).AppendLine();
-            sb.AppendLine("\t\t{");
+            sb.Append("\t\t[Preserve]\n");
+            sb.Append("\t\t[Serializable]\n");
+            sb.Append("\t\tpublic enum ").Append(enumName).Append(" : ").Append(ReadExcel.GetTrueType(underlyingType, className, inputPath, writtenForm)).Append("\n");
+            sb.Append("\t\t{\n");
 
             // 6. 处理枚举值（如果有）
             if (hasBraces && !string.IsNullOrEmpty(enumValues))
@@ -340,29 +349,29 @@ namespace F8Framework.Core.Editor
                     string trimmedPair = pair.Trim();
                     if (!string.IsNullOrEmpty(trimmedPair))
                     {
-                        sb.AppendLine("\t\t\t" + trimmedPair + ",");
+                        sb.Append("\t\t\t" + trimmedPair + ",\n");
                     }
                 }
             }
             else
             {
                 // 简化定义时添加一个默认值
-                sb.AppendLine("\t\t\tNone = 0,");
+                sb.Append("\t\t\tNone = 0,\n");
             }
 
-            sb.AppendLine("\t\t}");
+            sb.Append("\t\t}\n");
 
             binaryRegisters?.TryAdd($"{ExcelDataTool.CODE_NAMESPACE}.{className}.{enumName}", SupportType.ENUM);
             return sb.ToString();
         }
-
+        
         //创建数据管理器脚本
         public static void CreateDataManager(Dictionary<string, ScriptGenerator> codeList)
         {
             List<string> list = new List<string>();
             list.AddRange(codeList.Keys);
             IEnumerable types = list.FindAll(t => true);
-
+            
             StringBuilder source = new StringBuilder();
             source.Append("/*\n");
             source.Append(" *   This file was generated by a tool.\n");
@@ -412,7 +421,9 @@ namespace F8Framework.Core.Editor
                 source.Append("\t\t[Preserve]\n");
                 source.Append("\t\tpublic Dictionary<" + sg.GetIdType() + ", " + typeName + ">" + " Get" + typeNameNotItem + "()\n");
                 source.Append("\t\t{\n");
-                source.Append("\t\t\treturn p_" + t + ".Dict;\n");
+                source.Append("\t\t\tif (p_" + t + " != null) return p_" + t + ".Dict;\n");
+                source.Append("\t\t\tLogF8.LogError(\"未加载配置表： " + t + "\");\n");
+                source.Append("\t\t\treturn null;\n");
                 source.Append("\t\t}\n\n");
                 if (t == "LocalizedStrings")
                 {
@@ -428,13 +439,13 @@ namespace F8Framework.Core.Editor
                 source.Append("\t\t{\n");
                 source.Append("\t\t\tp_LocalizedStrings = Load<LocalizedStrings>(\"LocalizedStrings\") as LocalizedStrings;\n");
                 source.Append("\t\t}\n\n");
-
+            
                 source.Append("\t\t[Preserve]\n");
                 source.Append("\t\tpublic void LoadLocalizedStringsCallback(Action onLoadComplete)\n");
                 source.Append("\t\t{\n");
                 source.Append("\t\t\tUtil.Unity.StartCoroutine(LoadLocalizedStringsIEnumerator(onLoadComplete));\n");
                 source.Append("\t\t}\n\n");
-
+            
                 source.Append("\t\t[Preserve]\n");
                 source.Append("\t\tpublic IEnumerator LoadLocalizedStringsIEnumerator(Action onLoadComplete = null)\n");
                 source.Append("\t\t{\n");
@@ -456,8 +467,13 @@ namespace F8Framework.Core.Editor
 
             //运行时加载所有配置表
             source.Append("\t\t[Preserve]\n");
-            source.Append("\t\tpublic void RuntimeLoadAll(Dictionary<String, System.Object> objs)\n");
+            source.Append("\t\tpublic void RuntimeLoadAll(Dictionary<String, System.Object> objs = null)\n");
             source.Append("\t\t{\n");
+            source.Append("\t\t\tif (objs == null)\n");
+            source.Append("\t\t\t{\n");
+            source.Append("\t\t\t\tobjs = new Dictionary<string, object>();\n");
+            source.Append("\t\t\t\tReadExcel.Instance.LoadAllExcelData(objs);\n");
+            source.Append("\t\t\t}\n");
             foreach (string t in types)
             {
                 source.Append("\t\t\tp_" + t + " = objs[" + '"' + t + '"' + "] as " + t + ";\n");
@@ -471,56 +487,56 @@ namespace F8Framework.Core.Editor
             source.Append("\t\t{\n");
             foreach (string t in types)
             {
-                source.Append("\t\t\tyield return LoadAsync<" + t + ">(" + '"' + t + '"' + ", result => " + "p_" + t + " = result" + " as " + t + ");\n");
+                source.Append("\t\t\tyield return LoadAsync<" + t + ">("+ '"' + t + '"' + ", result => " +  "p_" + t + " = result" + " as " + t + ");\n");
             }
             source.Append("#if UNITY_EDITOR\n");
             source.Append("\t\t\tif (AssetManager.Instance.IsEditorMode)\n");
             source.Append("\t\t\t{\n");
-            source.Append("\t\t\t\tReadExcel.Instance.LoadAllExcelData();\n");
+            source.Append("\t\t\t\tRuntimeLoadAll();\n");
             source.Append("\t\t\t}\n");
             source.Append("#endif\n");
             source.Append("\t\t}\n\n");
-
+            
             //异步加载所有配置表
             source.Append("\t\t[Preserve]\n");
             source.Append("\t\tpublic async Task LoadAllAsyncTask()\n");
             source.Append("\t\t{\n");
             foreach (string t in types)
             {
-                source.Append("\t\t\tawait LoadAsyncTask<" + t + ">(" + '"' + t + '"' + ", result => " + "p_" + t + " = result" + " as " + t + ");\n");
+                source.Append("\t\t\tawait LoadAsyncTask<" + t + ">("+ '"' + t + '"' + ", result => " +  "p_" + t + " = result" + " as " + t + ");\n");
             }
             source.Append("#if UNITY_EDITOR\n");
             source.Append("\t\t\tif (AssetManager.Instance.IsEditorMode)\n");
             source.Append("\t\t\t{\n");
-            source.Append("\t\t\t\tReadExcel.Instance.LoadAllExcelData();\n");
+            source.Append("\t\t\t\tRuntimeLoadAll();\n");
             source.Append("\t\t\t}\n");
             source.Append("#endif\n");
             source.Append("\t\t}\n\n");
-
+            
             //异步加载所有配置表
             source.Append("\t\t[Preserve]\n");
             source.Append("\t\tpublic void LoadAllAsyncCallback(Action onLoadComplete = null)\n");
             source.Append("\t\t{\n");
             source.Append("\t\t\tUtil.Unity.StartCoroutine(LoadAllAsyncIEnumerator(onLoadComplete));\n");
             source.Append("\t\t}\n\n");
-
+            
             //异步加载所有配置表
             source.Append("\t\t[Preserve]\n");
             source.Append("\t\tpublic IEnumerator LoadAllAsyncIEnumerator(Action onLoadComplete = null)\n");
             source.Append("\t\t{\n");
             foreach (string t in types)
             {
-                source.Append("\t\t\tyield return LoadAsync<" + t + ">(" + '"' + t + '"' + ", result => " + "p_" + t + " = result" + " as " + t + ");\n");
+                source.Append("\t\t\tyield return LoadAsync<" + t + ">("+ '"' + t + '"' + ", result => " +  "p_" + t + " = result" + " as " + t + ");\n");
             }
             source.Append("#if UNITY_EDITOR\n");
             source.Append("\t\t\tif (AssetManager.Instance.IsEditorMode)\n");
             source.Append("\t\t\t{\n");
-            source.Append("\t\t\t\tReadExcel.Instance.LoadAllExcelData();\n");
+            source.Append("\t\t\t\tRuntimeLoadAll();\n");
             source.Append("\t\t\t}\n");
             source.Append("#endif\n");
             source.Append("\t\t\tonLoadComplete?.Invoke();\n");
             source.Append("\t\t}\n\n");
-
+            
             //反序列化
             source.Append("\t\t[Preserve]\n");
             source.Append("\t\tpublic T Load<T>(string name)\n");
@@ -531,19 +547,18 @@ namespace F8Framework.Core.Editor
             source.Append("\t\t\t\treturn default(T);\n");
             source.Append("\t\t\t}\n");
             source.Append("\t\t\tAssetManager.Instance.Unload(name, false);\n");
-
+            
             string exportFormat = F8EditorPrefs.GetString(BuildPkgTool.ConvertExcelToOtherFormatsKey, BuildPkgTool.ExcelToOtherFormats[1]);
             if (exportFormat == BuildPkgTool.ExcelToOtherFormats[1])
             {
                 source.Append("\t\t\tT obj = Util.BinarySerializer.Deserialize<T>(textAsset.bytes);\n");
-            }
-            else
+            }else
             {
                 source.Append("\t\t\tT obj = Util.LitJson.ToObject<T>(textAsset.text);\n");
             }
             source.Append("\t\t\treturn obj;\n");
             source.Append("\t\t}\n\n");
-
+            
             source.Append("\t\t[Preserve]\n");
             source.Append("\t\tpublic IEnumerator LoadAsync<T>(string name, Action<T> callback)\n");
             source.Append("\t\t{\n");
@@ -556,15 +571,14 @@ namespace F8Framework.Core.Editor
             if (exportFormat == BuildPkgTool.ExcelToOtherFormats[1])
             {
                 source.Append("\t\t\t\tT obj = Util.BinarySerializer.Deserialize<T>(textAsset.bytes);\n");
-            }
-            else
+            }else
             {
                 source.Append("\t\t\t\tT obj = Util.LitJson.ToObject<T>(textAsset.text);\n");
             }
             source.Append("\t\t\t\tcallback(obj);\n");
             source.Append("\t\t\t}\n");
             source.Append("\t\t}\n\n");
-
+            
             source.Append("\t\t[Preserve]\n");
             source.Append("\t\tpublic async Task LoadAsyncTask<T>(string name, Action<T> callback)\n");
             source.Append("\t\t{\n");
@@ -577,15 +591,14 @@ namespace F8Framework.Core.Editor
             if (exportFormat == BuildPkgTool.ExcelToOtherFormats[1])
             {
                 source.Append("\t\t\t\tT obj = Util.BinarySerializer.Deserialize<T>(textAsset.bytes);\n");
-            }
-            else
+            }else
             {
                 source.Append("\t\t\t\tT obj = Util.LitJson.ToObject<T>(textAsset.text);\n");
             }
             source.Append("\t\t\t\tcallback(obj);\n");
             source.Append("\t\t\t}\n");
             source.Append("\t\t}\n\n");
-
+            
             source.Append("\t\tpublic void OnInit(object createParam)\n");
             source.Append("\t\t{\n");
             source.Append("\t\t\t\n");
@@ -604,6 +617,11 @@ namespace F8Framework.Core.Editor
             source.Append("\t\t}\n\n");
             source.Append("\t\tpublic void OnTermination()\n");
             source.Append("\t\t{\n");
+            foreach (string t in types)
+            {
+                source.Append("\t\t\tp_" + t + " = null;\n");
+            }
+            source.Append("\t\t\tVariantName = null;\n");
             source.Append("\t\t\tbase.Destroy();\n");
             source.Append("\t\t}\n");
             source.Append("\t}\n");

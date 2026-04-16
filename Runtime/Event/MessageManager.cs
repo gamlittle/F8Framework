@@ -1,156 +1,128 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
+using UnityEngine;
 
 namespace F8Framework.Core
 {
-    // 消息管理器类，实现了单例模式和消息管理接口
     public class MessageManager : ModuleSingletonMono<MessageManager>, IMessageManager, IModule
     {
-        // 存储事件ID与事件处理器列表的字典
+        private const int MaxAsyncDispatchPerFrame = 1;
         internal Dictionary<int, List<IEventDataBase>> events = new Dictionary<int, List<IEventDataBase>>();
-        // 存储待删除的事件处理器列表
-        private List<IEventDataBase> delects = new List<IEventDataBase>();
-        // 用于检测死循环调用的调用栈
+        private readonly List<IEventDataBase> delects = new List<IEventDataBase>();
         internal HashSet<IEventDataBase> callStack = new HashSet<IEventDataBase>();
-        // 存储待触发的事件处理器列表
         internal Dictionary<int, Queue<IEventDataBase>> dispatchInvokes = new Dictionary<int, Queue<IEventDataBase>>();
+        private readonly Queue<AsyncDispatchTask> _asyncDispatchTasks = new Queue<AsyncDispatchTask>();
+        private readonly HashSet<IEventDataBase> _asyncInvokingCallStack = new HashSet<IEventDataBase>();
+        private Coroutine _asyncDispatchCoroutine;
 
-        // 输出消息死循环的函数
+        private sealed class AsyncDispatchTask
+        {
+            public Queue<IEventDataBase> Targets;
+            public Action<IEventDataBase> Invoker;
+        }
+
         private void MessageLoop(string debugInfo)
         {
             LogF8.LogError("消息死循环：{0}", debugInfo);
         }
 
-        // 输出不存在事件处理函数的警告
         private void NotActionLog(string eventId, string actionName)
         {
             LogF8.LogEvent("函数不存在：【{0}】【{1}】", eventId, actionName);
         }
 
-        // 输出不存在监听者的警告
         private void NotListenerLog(string debugInfo)
         {
             LogF8.LogEvent("监听者不存在：{0}", debugInfo);
         }
 
-        // 输出不存在事件的警告
         private void NotEventLogDispatch(string eventId)
         {
-            LogF8.LogEvent("没有创建监听，发送事件：【{0}】", eventId);
+            LogF8.LogEvent("没有创建监听，接收到事件：【{0}】", eventId);
         }
-        
-        // 输出不存在事件的警告
+
         private void NotEventLogRemove(string eventId)
         {
             LogF8.LogEvent("没有创建监听，移除监听：【{0}】", eventId);
         }
-        
+
         private void OnApplicationFocus(bool hasFocus)
         {
-            if (hasFocus) // 应用程序获得焦点
+            if (hasFocus)
             {
                 DispatchEvent(MessageEvent.ApplicationFocus);
             }
-            else // 应用程序失去焦点
+            else
             {
                 DispatchEvent(MessageEvent.NotApplicationFocus);
             }
         }
-    
+
         private void OnApplicationQuit()
         {
             DispatchEvent(MessageEvent.ApplicationQuit);
         }
-        
-        // 清空调用栈
+
         private void ClearCallStack()
         {
             callStack.Clear();
         }
 
-        // 判断事件是否在调用栈中
         private bool IsInCallStack(IEventDataBase eventData)
         {
-            return callStack.Contains(eventData);
+            return callStack.Contains(eventData) || _asyncInvokingCallStack.Contains(eventData);
         }
 
-        // 添加事件监听器（不带参数）
-        public void AddEventListener<T>(T eventName, Action listener, object handle) where T : Enum, IConvertible
+        private Queue<IEventDataBase> GetOrCreateDispatchQueue(int eventId)
         {
-            int tempName = (int)(object)eventName;
-            AddEventListener(tempName, listener, handle);
-        }
-
-        // 添加事件监听器（不带参数）
-        public void AddEventListener(int eventId, Action listener, object handle)
-        {
-            // 创建事件数据对象
-            IEventDataBase eventData = new EventData(eventId, listener, handle);
-
-            // 检查是否存在相同的事件数据
-            if (!events.ContainsKey(eventId))
+            if (!dispatchInvokes.TryGetValue(eventId, out var queue))
             {
-                events[eventId] = new List<IEventDataBase>(); // 如果不存在，则创建一个新列表
-            }
-            else
-            {
-                if (events[eventId].Contains(eventData))
-                {
-                    LogF8.LogEvent("【{0}】不能允许存在重复的事件处理函数。", eventId);
-                    return;
-                }
+                queue = new Queue<IEventDataBase>();
+                dispatchInvokes[eventId] = queue;
             }
 
-            events[eventId].Add(eventData);
+            return queue;
         }
 
-        // 添加事件监听器（带参数）
-        public void AddEventListener<T>(T eventName, Action<object[]> listener, object handle) where T : Enum, IConvertible
+        private List<IEventDataBase> GetOrCreateEventList(int eventId)
         {
-            int tempName = (int)(object)eventName;
-            AddEventListener(tempName, listener, handle);
-        }
-
-        // 添加事件监听器（带参数）
-        public void AddEventListener(int eventId, Action<object[]> listener, object handle)
-        {
-            IEventDataBase eventData = new EventData<object[]>(eventId, listener, handle);
-            if (!events.ContainsKey(eventId))
+            if (!events.TryGetValue(eventId, out var eventList))
             {
-                events[eventId] = new List<IEventDataBase>();
-            }
-            else
-            {
-                if (events[eventId].Contains(eventData))
-                {
-                    LogF8.LogEvent("【{0}】不能允许存在重复的事件处理函数。", eventId);
-                    return;
-                }
+                eventList = new List<IEventDataBase>();
+                events[eventId] = eventList;
             }
 
-            events[eventId].Add(eventData);
+            return eventList;
         }
 
-        // 移除事件监听器（不带参数）
-        public void RemoveEventListener<T>(T eventName, Action listener, object handle = null) where T : Enum, IConvertible
+        private void AddEventListenerInternal(int eventId, IEventDataBase eventData)
         {
-            int tempName = (int)(object)eventName;
-            RemoveEventListener(tempName, listener, handle);
+            var eventList = GetOrCreateEventList(eventId);
+            if (eventList.Contains(eventData))
+            {
+                LogF8.LogEvent("【{0}】不能允许存在重复的事件处理函数。", eventId);
+                return;
+            }
+
+            eventList.Add(eventData);
         }
 
-        // 移除事件监听器（不带参数）
-        public void RemoveEventListener(int eventId, Action listener, object handle = null)
+        private void RemoveEventListenerInternal<TEventData>(int eventId, Func<TEventData, bool> predicate, string actionName = null)
+            where TEventData : class, IEventDataBase
         {
-            if (!events.ContainsKey(eventId))
+            if (!events.TryGetValue(eventId, out var eventList))
             {
                 NotEventLogRemove(eventId.ToString());
                 return;
             }
 
-            var eventList = events[eventId];
             if (eventList.Count == 0)
             {
-                NotActionLog(eventId.ToString(), listener.Method.Name);
+                if (!string.IsNullOrEmpty(actionName))
+                {
+                    NotActionLog(eventId.ToString(), actionName);
+                }
                 return;
             }
 
@@ -158,51 +130,12 @@ namespace F8Framework.Core
 
             foreach (var itemObj in eventList)
             {
-                if (itemObj is EventData eventData && eventData.Listener == listener && eventData.Handle == handle)
+                if (itemObj is TEventData eventData && predicate(eventData))
                 {
-                    eventData.Handle = null;
-                    delects.Add(eventData);
-                }
-            }
-
-            foreach (var deletion in delects)
-            {
-                eventList.Remove(deletion);
-            }
-
-            delects.Clear();
-        }
-
-        // 移除事件监听器（带参数）
-        public void RemoveEventListener<T>(T eventName, Action<object[]> listener, object handle = null) where T : Enum, IConvertible
-        {
-            int tempName = (int)(object)eventName;
-            RemoveEventListener(tempName, listener, handle);
-        }
-
-        // 移除事件监听器（带参数）
-        public void RemoveEventListener(int eventId, Action<object[]> listener, object handle = null)
-        {
-            if (!events.ContainsKey(eventId))
-            {
-                NotEventLogRemove(eventId.ToString());
-                return;
-            }
-
-            var eventList = events[eventId];
-            if (eventList.Count == 0)
-            {
-                NotActionLog(eventId.ToString(), listener.Method.Name);
-                return;
-            }
-
-            delects.Clear();
-
-            foreach (var itemObj in eventList)
-            {
-                if (itemObj is EventData<object[]> eventData && eventData.Listener == listener && eventData.Handle == handle)
-                {
-                    eventData.Handle = null;
+                    if (eventData is EventDataBase eventDataBase)
+                    {
+                        eventDataBase.Handle = null;
+                    }
                     delects.Add(itemObj);
                 }
             }
@@ -215,170 +148,661 @@ namespace F8Framework.Core
             delects.Clear();
         }
 
-        // 删除此事件所有监听
+        private Queue<IEventDataBase> CollectDispatchTargets(int eventId)
+        {
+            if (!events.TryGetValue(eventId, out var eventDatas))
+            {
+                NotEventLogDispatch(eventId.ToString());
+                return null;
+            }
+
+            var queue = new Queue<IEventDataBase>();
+
+            foreach (var obj in eventDatas)
+            {
+                if (IsInCallStack(obj))
+                {
+                    MessageLoop(obj.LogDebugInfo());
+                    continue;
+                }
+
+                if (obj.EventDataShouldBeInvoked())
+                {
+                    queue.Enqueue(obj);
+                }
+                else
+                {
+                    NotListenerLog(obj.LogDebugInfo());
+                }
+            }
+
+            return queue;
+        }
+
+        private void FinishDispatch()
+        {
+            ClearCallStack();
+        }
+
+        private void InvokeEventData(IEventDataBase eventDataBase)
+        {
+            if (eventDataBase is IInvokableEventData eventData)
+            {
+                eventData.Invoke();
+            }
+        }
+
+        private void InvokeEventData<T1>(IEventDataBase eventDataBase, T1 arg1)
+        {
+            if (eventDataBase is IInvokableEventData<T1> eventData)
+            {
+                eventData.Invoke(arg1);
+            }
+        }
+
+        private void InvokeEventData<T1, T2>(IEventDataBase eventDataBase, T1 arg1, T2 arg2)
+        {
+            if (eventDataBase is IInvokableEventData<T1, T2> eventData)
+            {
+                eventData.Invoke(arg1, arg2);
+            }
+        }
+
+        private void InvokeEventData<T1, T2, T3>(IEventDataBase eventDataBase, T1 arg1, T2 arg2, T3 arg3)
+        {
+            if (eventDataBase is IInvokableEventData<T1, T2, T3> eventData)
+            {
+                eventData.Invoke(arg1, arg2, arg3);
+            }
+        }
+
+        private void InvokeEventData<T1, T2, T3, T4>(IEventDataBase eventDataBase, T1 arg1, T2 arg2, T3 arg3, T4 arg4)
+        {
+            if (eventDataBase is IInvokableEventData<T1, T2, T3, T4> eventData)
+            {
+                eventData.Invoke(arg1, arg2, arg3, arg4);
+            }
+        }
+
+        private void InvokeEventData<T1, T2, T3, T4, T5>(IEventDataBase eventDataBase, T1 arg1, T2 arg2, T3 arg3, T4 arg4, T5 arg5)
+        {
+            if (eventDataBase is IInvokableEventData<T1, T2, T3, T4, T5> eventData)
+            {
+                eventData.Invoke(arg1, arg2, arg3, arg4, arg5);
+            }
+        }
+
+        private void InvokeEventData<T1, T2, T3, T4, T5, T6>(IEventDataBase eventDataBase, T1 arg1, T2 arg2, T3 arg3, T4 arg4, T5 arg5, T6 arg6)
+        {
+            if (eventDataBase is IInvokableEventData<T1, T2, T3, T4, T5, T6> eventData)
+            {
+                eventData.Invoke(arg1, arg2, arg3, arg4, arg5, arg6);
+            }
+        }
+
+        private void InvokeEventData<T1, T2, T3, T4, T5, T6, T7>(IEventDataBase eventDataBase, T1 arg1, T2 arg2, T3 arg3, T4 arg4, T5 arg5, T6 arg6, T7 arg7)
+        {
+            if (eventDataBase is IInvokableEventData<T1, T2, T3, T4, T5, T6, T7> eventData)
+            {
+                eventData.Invoke(arg1, arg2, arg3, arg4, arg5, arg6, arg7);
+            }
+        }
+
+        private Coroutine EnqueueAsyncDispatch(int eventId, Action<IEventDataBase> invoker)
+        {
+            var queue = CollectDispatchTargets(eventId);
+            if (queue == null)
+            {
+                return _asyncDispatchCoroutine;
+            }
+
+            if (queue.Count == 0)
+            {
+                return _asyncDispatchCoroutine;
+            }
+
+            _asyncDispatchTasks.Enqueue(new AsyncDispatchTask
+            {
+                Targets = queue,
+                Invoker = invoker
+            });
+
+            if (_asyncDispatchCoroutine == null)
+            {
+                _asyncDispatchCoroutine = StartCoroutine(ProcessAsyncDispatchQueue());
+            }
+
+            return _asyncDispatchCoroutine;
+        }
+
+        private IEnumerator ProcessAsyncDispatchQueue()
+        {
+            while (_asyncDispatchTasks.Count > 0)
+            {
+                int dispatchCount = 0;
+
+                while (_asyncDispatchTasks.Count > 0 && dispatchCount < MaxAsyncDispatchPerFrame)
+                {
+                    var task = _asyncDispatchTasks.Peek();
+                    if (task.Targets.Count == 0)
+                    {
+                        _asyncDispatchTasks.Dequeue();
+                        continue;
+                    }
+
+                    var eventData = task.Targets.Dequeue();
+                    if (eventData.EventDataShouldBeInvoked())
+                    {
+                        _asyncInvokingCallStack.Add(eventData);
+                        try
+                        {
+                            task.Invoker?.Invoke(eventData);
+                        }
+                        finally
+                        {
+                            _asyncInvokingCallStack.Remove(eventData);
+                        }
+                    }
+                    else
+                    {
+                        NotListenerLog(eventData.LogDebugInfo());
+                    }
+
+                    dispatchCount++;
+
+                    if (task.Targets.Count == 0)
+                    {
+                        _asyncDispatchTasks.Dequeue();
+                    }
+                }
+
+                if (_asyncDispatchTasks.Count > 0)
+                {
+                    yield return null;
+                }
+            }
+
+            _asyncDispatchCoroutine = null;
+        }
+
+        private void StopAsyncDispatch()
+        {
+            if (_asyncDispatchCoroutine != null)
+            {
+                StopCoroutine(_asyncDispatchCoroutine);
+                _asyncDispatchCoroutine = null;
+            }
+
+            while (_asyncDispatchTasks.Count > 0)
+            {
+                _asyncDispatchTasks.Dequeue();
+            }
+
+            _asyncInvokingCallStack.Clear();
+        }
+
+        public void AddEventListener<T>(T eventName, Action listener, object handle) where T : Enum, IConvertible
+        {
+            AddEventListener((int)(object)eventName, listener, handle);
+        }
+
+        public void AddEventListener(int eventId, Action listener, object handle)
+        {
+            AddEventListenerInternal(eventId, new EventData(eventId, listener, handle));
+        }
+
+        public void AddEventListener<T, T1>(T eventName, Action<T1> listener, object handle) where T : Enum, IConvertible
+        {
+            AddEventListener((int)(object)eventName, listener, handle);
+        }
+
+        public void AddEventListener<T1>(int eventId, Action<T1> listener, object handle)
+        {
+            AddEventListenerInternal(eventId, new EventData<T1>(eventId, listener, handle));
+        }
+
+        public void AddEventListener<T, T1, T2>(T eventName, Action<T1, T2> listener, object handle) where T : Enum, IConvertible
+        {
+            AddEventListener((int)(object)eventName, listener, handle);
+        }
+
+        public void AddEventListener<T1, T2>(int eventId, Action<T1, T2> listener, object handle)
+        {
+            AddEventListenerInternal(eventId, new EventData<T1, T2>(eventId, listener, handle));
+        }
+
+        public void AddEventListener<T, T1, T2, T3>(T eventName, Action<T1, T2, T3> listener, object handle) where T : Enum, IConvertible
+        {
+            AddEventListener((int)(object)eventName, listener, handle);
+        }
+
+        public void AddEventListener<T1, T2, T3>(int eventId, Action<T1, T2, T3> listener, object handle)
+        {
+            AddEventListenerInternal(eventId, new EventData<T1, T2, T3>(eventId, listener, handle));
+        }
+
+        public void AddEventListener<T, T1, T2, T3, T4>(T eventName, Action<T1, T2, T3, T4> listener, object handle) where T : Enum, IConvertible
+        {
+            AddEventListener((int)(object)eventName, listener, handle);
+        }
+
+        public void AddEventListener<T1, T2, T3, T4>(int eventId, Action<T1, T2, T3, T4> listener, object handle)
+        {
+            AddEventListenerInternal(eventId, new EventData<T1, T2, T3, T4>(eventId, listener, handle));
+        }
+
+        public void AddEventListener<T, T1, T2, T3, T4, T5>(T eventName, Action<T1, T2, T3, T4, T5> listener, object handle) where T : Enum, IConvertible
+        {
+            AddEventListener((int)(object)eventName, listener, handle);
+        }
+
+        public void AddEventListener<T1, T2, T3, T4, T5>(int eventId, Action<T1, T2, T3, T4, T5> listener, object handle)
+        {
+            AddEventListenerInternal(eventId, new EventData<T1, T2, T3, T4, T5>(eventId, listener, handle));
+        }
+
+        public void AddEventListener<T, T1, T2, T3, T4, T5, T6>(T eventName, Action<T1, T2, T3, T4, T5, T6> listener, object handle) where T : Enum, IConvertible
+        {
+            AddEventListener((int)(object)eventName, listener, handle);
+        }
+
+        public void AddEventListener<T1, T2, T3, T4, T5, T6>(int eventId, Action<T1, T2, T3, T4, T5, T6> listener, object handle)
+        {
+            AddEventListenerInternal(eventId, new EventData<T1, T2, T3, T4, T5, T6>(eventId, listener, handle));
+        }
+
+        public void AddEventListener<T, T1, T2, T3, T4, T5, T6, T7>(T eventName, Action<T1, T2, T3, T4, T5, T6, T7> listener, object handle) where T : Enum, IConvertible
+        {
+            AddEventListener((int)(object)eventName, listener, handle);
+        }
+
+        public void AddEventListener<T1, T2, T3, T4, T5, T6, T7>(int eventId, Action<T1, T2, T3, T4, T5, T6, T7> listener, object handle)
+        {
+            AddEventListenerInternal(eventId, new EventData<T1, T2, T3, T4, T5, T6, T7>(eventId, listener, handle));
+        }
+
+        public void RemoveEventListener<T>(T eventName, Action listener, object handle = null) where T : Enum, IConvertible
+        {
+            RemoveEventListener((int)(object)eventName, listener, handle);
+        }
+
+        public void RemoveEventListener(int eventId, Action listener, object handle = null)
+        {
+            RemoveEventListenerInternal<EventData>(eventId, eventData => eventData.Listener == listener && eventData.Handle == handle, listener?.Method.Name);
+        }
+
+        public void RemoveEventListener<T, T1>(T eventName, Action<T1> listener, object handle = null) where T : Enum, IConvertible
+        {
+            RemoveEventListener((int)(object)eventName, listener, handle);
+        }
+
+        public void RemoveEventListener<T1>(int eventId, Action<T1> listener, object handle = null)
+        {
+            RemoveEventListenerInternal<EventData<T1>>(eventId, eventData => eventData.Listener == listener && eventData.Handle == handle, listener?.Method.Name);
+        }
+
+        public void RemoveEventListener<T, T1, T2>(T eventName, Action<T1, T2> listener, object handle = null) where T : Enum, IConvertible
+        {
+            RemoveEventListener((int)(object)eventName, listener, handle);
+        }
+
+        public void RemoveEventListener<T1, T2>(int eventId, Action<T1, T2> listener, object handle = null)
+        {
+            RemoveEventListenerInternal<EventData<T1, T2>>(eventId, eventData => eventData.Listener == listener && eventData.Handle == handle, listener?.Method.Name);
+        }
+
+        public void RemoveEventListener<T, T1, T2, T3>(T eventName, Action<T1, T2, T3> listener, object handle = null) where T : Enum, IConvertible
+        {
+            RemoveEventListener((int)(object)eventName, listener, handle);
+        }
+
+        public void RemoveEventListener<T1, T2, T3>(int eventId, Action<T1, T2, T3> listener, object handle = null)
+        {
+            RemoveEventListenerInternal<EventData<T1, T2, T3>>(eventId, eventData => eventData.Listener == listener && eventData.Handle == handle, listener?.Method.Name);
+        }
+
+        public void RemoveEventListener<T, T1, T2, T3, T4>(T eventName, Action<T1, T2, T3, T4> listener, object handle = null) where T : Enum, IConvertible
+        {
+            RemoveEventListener((int)(object)eventName, listener, handle);
+        }
+
+        public void RemoveEventListener<T1, T2, T3, T4>(int eventId, Action<T1, T2, T3, T4> listener, object handle = null)
+        {
+            RemoveEventListenerInternal<EventData<T1, T2, T3, T4>>(eventId, eventData => eventData.Listener == listener && eventData.Handle == handle, listener?.Method.Name);
+        }
+
+        public void RemoveEventListener<T, T1, T2, T3, T4, T5>(T eventName, Action<T1, T2, T3, T4, T5> listener, object handle = null) where T : Enum, IConvertible
+        {
+            RemoveEventListener((int)(object)eventName, listener, handle);
+        }
+
+        public void RemoveEventListener<T1, T2, T3, T4, T5>(int eventId, Action<T1, T2, T3, T4, T5> listener, object handle = null)
+        {
+            RemoveEventListenerInternal<EventData<T1, T2, T3, T4, T5>>(eventId, eventData => eventData.Listener == listener && eventData.Handle == handle, listener?.Method.Name);
+        }
+
+        public void RemoveEventListener<T, T1, T2, T3, T4, T5, T6>(T eventName, Action<T1, T2, T3, T4, T5, T6> listener, object handle = null) where T : Enum, IConvertible
+        {
+            RemoveEventListener((int)(object)eventName, listener, handle);
+        }
+
+        public void RemoveEventListener<T1, T2, T3, T4, T5, T6>(int eventId, Action<T1, T2, T3, T4, T5, T6> listener, object handle = null)
+        {
+            RemoveEventListenerInternal<EventData<T1, T2, T3, T4, T5, T6>>(eventId, eventData => eventData.Listener == listener && eventData.Handle == handle, listener?.Method.Name);
+        }
+
+        public void RemoveEventListener<T, T1, T2, T3, T4, T5, T6, T7>(T eventName, Action<T1, T2, T3, T4, T5, T6, T7> listener, object handle = null) where T : Enum, IConvertible
+        {
+            RemoveEventListener((int)(object)eventName, listener, handle);
+        }
+
+        public void RemoveEventListener<T1, T2, T3, T4, T5, T6, T7>(int eventId, Action<T1, T2, T3, T4, T5, T6, T7> listener, object handle = null)
+        {
+            RemoveEventListenerInternal<EventData<T1, T2, T3, T4, T5, T6, T7>>(eventId, eventData => eventData.Listener == listener && eventData.Handle == handle, listener?.Method.Name);
+        }
+
         public void RemoveEventListener<T>(T eventName)
         {
-            int tempName = (int)(object)eventName;
-            RemoveEventListener(tempName);
+            RemoveEventListener((int)(object)eventName);
         }
-        
+
         public void RemoveEventListener(int eventId)
         {
-            if (events.ContainsKey(eventId))
+            if (events.ContainsKey(eventId) && events[eventId].Count > 0)
             {
-                if (events[eventId].Count > 0)
-                {
-                    events.Remove(eventId);
-                }
+                events.Remove(eventId);
             }
         }
-        
-        // 触发事件（不带参数）
+
         public void DispatchEvent<T>(T eventName) where T : Enum, IConvertible
         {
-            int tempName = (int)(object)eventName;
-            DispatchEvent(tempName);
+            DispatchEvent((int)(object)eventName);
         }
 
-        // 触发事件（不带参数）
         public void DispatchEvent(int eventId)
         {
-            if (!events.TryGetValue(eventId, out List<IEventDataBase> eventDatas))
+            var queue = CollectDispatchTargets(eventId);
+            if (queue == null)
             {
-                NotEventLogDispatch(eventId.ToString());
                 return;
             }
 
-            foreach (IEventDataBase obj in eventDatas)
+            while (queue.Count > 0)
             {
-                if (IsInCallStack(obj))
-                {
-                    MessageLoop(obj.LogDebugInfo());
-                    continue;
-                }
-
-                if (obj.EventDataShouldBeInvoked())
-                {
-                    if (!dispatchInvokes.ContainsKey(eventId))
-                    {
-                        dispatchInvokes[eventId] = new Queue<IEventDataBase>();
-                    }
-                    dispatchInvokes[eventId].Enqueue(obj);
-                    callStack.Add(obj);
-                }
-                else
-                {
-                    NotListenerLog(obj.LogDebugInfo());
-                    continue;
-                }
-            }
-            
-            while (dispatchInvokes.ContainsKey(eventId) && dispatchInvokes[eventId].Count > 0)
-            {
-                var obj = dispatchInvokes[eventId].Dequeue();
-                if (obj is EventData eventData)
-                {
-                    eventData.Listener.Invoke();
-                }
-                else if (obj is EventData<object[]> eventData1)
-                {
-                    eventData1.Listener.Invoke(null);
-                }
+                var obj = queue.Dequeue();
+                callStack.Add(obj);
+                InvokeEventData(obj);
             }
 
-            ClearCallStack(); // 清除调用栈
+            FinishDispatch();
         }
 
-        // 触发事件（带参数）
-        public void DispatchEvent<T>(T eventName, params object[] arg1) where T : Enum, IConvertible
+        public Coroutine DispatchEventAsync<T>(T eventName) where T : Enum, IConvertible
         {
-            int tempName = (int)(object)eventName;
-            DispatchEvent(tempName, arg1);
+            return DispatchEventAsync((int)(object)eventName);
         }
 
-        // 触发事件（带参数）
-        public void DispatchEvent(int eventId, params object[] arg1)
+        public Coroutine DispatchEventAsync(int eventId)
         {
-            if (!events.TryGetValue(eventId, out List<IEventDataBase> eventDatas))
+            return EnqueueAsyncDispatch(eventId, InvokeEventData);
+        }
+
+        public void DispatchEvent<T, T1>(T eventName, T1 arg1) where T : Enum, IConvertible
+        {
+            DispatchEvent((int)(object)eventName, arg1);
+        }
+
+        public void DispatchEvent<T1>(int eventId, T1 arg1)
+        {
+            var queue = CollectDispatchTargets(eventId);
+            if (queue == null)
             {
-                NotEventLogDispatch(eventId.ToString());
                 return;
             }
 
-            foreach (IEventDataBase obj in eventDatas)
+            while (queue.Count > 0)
             {
-                if (IsInCallStack(obj))
-                {
-                    MessageLoop(obj.LogDebugInfo());
-                    continue;
-                }
-                
-                if (obj.EventDataShouldBeInvoked())
-                {
-                    if (!dispatchInvokes.ContainsKey(eventId))
-                    {
-                        dispatchInvokes[eventId] = new Queue<IEventDataBase>();
-                    }
-                    dispatchInvokes[eventId].Enqueue(obj);
-                    callStack.Add(obj);
-                }
-                else
-                {
-                    NotListenerLog(obj.LogDebugInfo());
-                    continue;
-                }
-            }
-            
-            while (dispatchInvokes.ContainsKey(eventId) && dispatchInvokes[eventId].Count > 0)
-            {
-                var obj = dispatchInvokes[eventId].Dequeue();
-                if (obj is EventData<object[]> eventData1)
-                {
-                    eventData1.Listener.Invoke(arg1);
-                }
-                else if (obj is EventData eventData)
-                {
-                    eventData.Listener.Invoke();
-                }
+                var obj = queue.Dequeue();
+                callStack.Add(obj);
+                InvokeEventData(obj, arg1);
             }
 
-            ClearCallStack(); // 清除调用栈
+            FinishDispatch();
         }
 
-        // 清空事件管理器
+        public Coroutine DispatchEventAsync<T, T1>(T eventName, T1 arg1) where T : Enum, IConvertible
+        {
+            return DispatchEventAsync((int)(object)eventName, arg1);
+        }
+
+        public Coroutine DispatchEventAsync<T1>(int eventId, T1 arg1)
+        {
+            return EnqueueAsyncDispatch(eventId, eventData => InvokeEventData(eventData, arg1));
+        }
+
+        public void DispatchEvent<T, T1, T2>(T eventName, T1 arg1, T2 arg2) where T : Enum, IConvertible
+        {
+            DispatchEvent((int)(object)eventName, arg1, arg2);
+        }
+
+        public void DispatchEvent<T1, T2>(int eventId, T1 arg1, T2 arg2)
+        {
+            var queue = CollectDispatchTargets(eventId);
+            if (queue == null)
+            {
+                return;
+            }
+
+            while (queue.Count > 0)
+            {
+                var obj = queue.Dequeue();
+                callStack.Add(obj);
+                InvokeEventData(obj, arg1, arg2);
+            }
+
+            FinishDispatch();
+        }
+
+        public Coroutine DispatchEventAsync<T, T1, T2>(T eventName, T1 arg1, T2 arg2) where T : Enum, IConvertible
+        {
+            return DispatchEventAsync((int)(object)eventName, arg1, arg2);
+        }
+
+        public Coroutine DispatchEventAsync<T1, T2>(int eventId, T1 arg1, T2 arg2)
+        {
+            return EnqueueAsyncDispatch(eventId, eventData => InvokeEventData(eventData, arg1, arg2));
+        }
+
+        public void DispatchEvent<T, T1, T2, T3>(T eventName, T1 arg1, T2 arg2, T3 arg3) where T : Enum, IConvertible
+        {
+            DispatchEvent((int)(object)eventName, arg1, arg2, arg3);
+        }
+
+        public void DispatchEvent<T1, T2, T3>(int eventId, T1 arg1, T2 arg2, T3 arg3)
+        {
+            var queue = CollectDispatchTargets(eventId);
+            if (queue == null)
+            {
+                return;
+            }
+
+            while (queue.Count > 0)
+            {
+                var obj = queue.Dequeue();
+                callStack.Add(obj);
+                InvokeEventData(obj, arg1, arg2, arg3);
+            }
+
+            FinishDispatch();
+        }
+
+        public Coroutine DispatchEventAsync<T, T1, T2, T3>(T eventName, T1 arg1, T2 arg2, T3 arg3) where T : Enum, IConvertible
+        {
+            return DispatchEventAsync((int)(object)eventName, arg1, arg2, arg3);
+        }
+
+        public Coroutine DispatchEventAsync<T1, T2, T3>(int eventId, T1 arg1, T2 arg2, T3 arg3)
+        {
+            return EnqueueAsyncDispatch(eventId, eventData => InvokeEventData(eventData, arg1, arg2, arg3));
+        }
+
+        public void DispatchEvent<T, T1, T2, T3, T4>(T eventName, T1 arg1, T2 arg2, T3 arg3, T4 arg4) where T : Enum, IConvertible
+        {
+            DispatchEvent((int)(object)eventName, arg1, arg2, arg3, arg4);
+        }
+
+        public void DispatchEvent<T1, T2, T3, T4>(int eventId, T1 arg1, T2 arg2, T3 arg3, T4 arg4)
+        {
+            var queue = CollectDispatchTargets(eventId);
+            if (queue == null)
+            {
+                return;
+            }
+
+            while (queue.Count > 0)
+            {
+                var obj = queue.Dequeue();
+                callStack.Add(obj);
+                InvokeEventData(obj, arg1, arg2, arg3, arg4);
+            }
+
+            FinishDispatch();
+        }
+
+        public Coroutine DispatchEventAsync<T, T1, T2, T3, T4>(T eventName, T1 arg1, T2 arg2, T3 arg3, T4 arg4) where T : Enum, IConvertible
+        {
+            return DispatchEventAsync((int)(object)eventName, arg1, arg2, arg3, arg4);
+        }
+
+        public Coroutine DispatchEventAsync<T1, T2, T3, T4>(int eventId, T1 arg1, T2 arg2, T3 arg3, T4 arg4)
+        {
+            return EnqueueAsyncDispatch(eventId, eventData => InvokeEventData(eventData, arg1, arg2, arg3, arg4));
+        }
+
+        public void DispatchEvent<T, T1, T2, T3, T4, T5>(T eventName, T1 arg1, T2 arg2, T3 arg3, T4 arg4, T5 arg5) where T : Enum, IConvertible
+        {
+            DispatchEvent((int)(object)eventName, arg1, arg2, arg3, arg4, arg5);
+        }
+
+        public void DispatchEvent<T1, T2, T3, T4, T5>(int eventId, T1 arg1, T2 arg2, T3 arg3, T4 arg4, T5 arg5)
+        {
+            var queue = CollectDispatchTargets(eventId);
+            if (queue == null)
+            {
+                return;
+            }
+
+            while (queue.Count > 0)
+            {
+                var obj = queue.Dequeue();
+                callStack.Add(obj);
+                InvokeEventData(obj, arg1, arg2, arg3, arg4, arg5);
+            }
+
+            FinishDispatch();
+        }
+
+        public Coroutine DispatchEventAsync<T, T1, T2, T3, T4, T5>(T eventName, T1 arg1, T2 arg2, T3 arg3, T4 arg4, T5 arg5) where T : Enum, IConvertible
+        {
+            return DispatchEventAsync((int)(object)eventName, arg1, arg2, arg3, arg4, arg5);
+        }
+
+        public Coroutine DispatchEventAsync<T1, T2, T3, T4, T5>(int eventId, T1 arg1, T2 arg2, T3 arg3, T4 arg4, T5 arg5)
+        {
+            return EnqueueAsyncDispatch(eventId, eventData => InvokeEventData(eventData, arg1, arg2, arg3, arg4, arg5));
+        }
+
+        public void DispatchEvent<T, T1, T2, T3, T4, T5, T6>(T eventName, T1 arg1, T2 arg2, T3 arg3, T4 arg4, T5 arg5, T6 arg6) where T : Enum, IConvertible
+        {
+            DispatchEvent((int)(object)eventName, arg1, arg2, arg3, arg4, arg5, arg6);
+        }
+
+        public void DispatchEvent<T1, T2, T3, T4, T5, T6>(int eventId, T1 arg1, T2 arg2, T3 arg3, T4 arg4, T5 arg5, T6 arg6)
+        {
+            var queue = CollectDispatchTargets(eventId);
+            if (queue == null)
+            {
+                return;
+            }
+
+            while (queue.Count > 0)
+            {
+                var obj = queue.Dequeue();
+                callStack.Add(obj);
+                InvokeEventData(obj, arg1, arg2, arg3, arg4, arg5, arg6);
+            }
+
+            FinishDispatch();
+        }
+
+        public Coroutine DispatchEventAsync<T, T1, T2, T3, T4, T5, T6>(T eventName, T1 arg1, T2 arg2, T3 arg3, T4 arg4, T5 arg5, T6 arg6) where T : Enum, IConvertible
+        {
+            return DispatchEventAsync((int)(object)eventName, arg1, arg2, arg3, arg4, arg5, arg6);
+        }
+
+        public Coroutine DispatchEventAsync<T1, T2, T3, T4, T5, T6>(int eventId, T1 arg1, T2 arg2, T3 arg3, T4 arg4, T5 arg5, T6 arg6)
+        {
+            return EnqueueAsyncDispatch(eventId, eventData => InvokeEventData(eventData, arg1, arg2, arg3, arg4, arg5, arg6));
+        }
+
+        public void DispatchEvent<T, T1, T2, T3, T4, T5, T6, T7>(T eventName, T1 arg1, T2 arg2, T3 arg3, T4 arg4, T5 arg5, T6 arg6, T7 arg7) where T : Enum, IConvertible
+        {
+            DispatchEvent((int)(object)eventName, arg1, arg2, arg3, arg4, arg5, arg6, arg7);
+        }
+
+        public void DispatchEvent<T1, T2, T3, T4, T5, T6, T7>(int eventId, T1 arg1, T2 arg2, T3 arg3, T4 arg4, T5 arg5, T6 arg6, T7 arg7)
+        {
+            var queue = CollectDispatchTargets(eventId);
+            if (queue == null)
+            {
+                return;
+            }
+
+            while (queue.Count > 0)
+            {
+                var obj = queue.Dequeue();
+                callStack.Add(obj);
+                InvokeEventData(obj, arg1, arg2, arg3, arg4, arg5, arg6, arg7);
+            }
+
+            FinishDispatch();
+        }
+
+        public Coroutine DispatchEventAsync<T, T1, T2, T3, T4, T5, T6, T7>(T eventName, T1 arg1, T2 arg2, T3 arg3, T4 arg4, T5 arg5, T6 arg6, T7 arg7) where T : Enum, IConvertible
+        {
+            return DispatchEventAsync((int)(object)eventName, arg1, arg2, arg3, arg4, arg5, arg6, arg7);
+        }
+
+        public Coroutine DispatchEventAsync<T1, T2, T3, T4, T5, T6, T7>(int eventId, T1 arg1, T2 arg2, T3 arg3, T4 arg4, T5 arg5, T6 arg6, T7 arg7)
+        {
+            return EnqueueAsyncDispatch(eventId, eventData => InvokeEventData(eventData, arg1, arg2, arg3, arg4, arg5, arg6, arg7));
+        }
+
         public void Clear()
         {
+            StopAsyncDispatch();
             events.Clear();
             delects.Clear();
             callStack.Clear();
             dispatchInvokes.Clear();
         }
 
-        // 模块初始化
         public void OnInit(object createParam)
         {
-
         }
 
-        // 更新逻辑
         public void OnUpdate()
         {
-
         }
 
-        // 更新逻辑（后执行）
         public void OnLateUpdate()
         {
-
         }
 
-        // 固定更新逻辑
         public void OnFixedUpdate()
         {
-
         }
 
-        // 终止模块
         public void OnTermination()
         {
             Clear();

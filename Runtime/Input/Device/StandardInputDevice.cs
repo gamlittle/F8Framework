@@ -87,12 +87,15 @@ namespace F8Framework.Core
             RegisterVirtualAxis(InputAxisType.MouseY);
             RegisterVirtualAxis(InputAxisType.MouseScrollWheel);
             RegisterVirtualAxis(InputAxisType.Horizontal);
+            RegisterVirtualAxis(InputAxisType.HorizontalRaw);
             RegisterVirtualAxis(InputAxisType.Vertical);
+            RegisterVirtualAxis(InputAxisType.VerticalRaw);
             RegisterVirtualAxis(InputAxisType.UpperLower);
         }
         
         public override void OnRun()
         {
+#if ENABLE_LEGACY_INPUT_MANAGER
             //标准PC平台：鼠标和键盘做为输入设备
             if (Input.GetMouseButtonDown(0))
             {
@@ -170,6 +173,7 @@ namespace F8Framework.Core
             }
             
             SetVirtualMousePosition(Input.mousePosition);
+#endif
         }
         
         public override void OnShutdown()
@@ -183,7 +187,9 @@ namespace F8Framework.Core
             UnRegisterVirtualAxis(InputAxisType.MouseY);
             UnRegisterVirtualAxis(InputAxisType.MouseScrollWheel);
             UnRegisterVirtualAxis(InputAxisType.Horizontal);
+            UnRegisterVirtualAxis(InputAxisType.HorizontalRaw);
             UnRegisterVirtualAxis(InputAxisType.Vertical);
+            UnRegisterVirtualAxis(InputAxisType.VerticalRaw);
             UnRegisterVirtualAxis(InputAxisType.UpperLower);
         }
     }

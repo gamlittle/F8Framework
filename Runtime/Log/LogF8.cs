@@ -77,6 +77,11 @@ namespace F8Framework.Core
             Debug.Log(sb.ToString());
         }
         
+        public static void Log(string s)
+        {
+            Debug.Log(s);
+        }
+        
         public static void Log(object o)
         {
             Debug.Log(o);
@@ -90,6 +95,11 @@ namespace F8Framework.Core
         public static void LogUtil(string s, params object[] p)
         {
             LogColor("[工具日志]", color10, s, p);
+        }
+        
+        public static void LogUtil(string s)
+        {
+            LogColor("[工具日志]", color10, s);
         }
         
         public static void LogUtil(object o)
@@ -107,6 +117,11 @@ namespace F8Framework.Core
             LogColor("[版本日志]", color9, s, p);
         }
         
+        public static void LogVersion(string s)
+        {
+            LogColor("[版本日志]", color9, s);
+        }
+        
         public static void LogVersion(object o)
         {
             LogColor("[版本日志]", color9, o);
@@ -120,6 +135,11 @@ namespace F8Framework.Core
         public static void LogSDK(string s, params object[] p)
         {
             LogColor("[SDK日志]", color8, s, p);
+        }
+        
+        public static void LogSDK(string s)
+        {
+            LogColor("[SDK日志]", color8, s);
         }
         
         public static void LogSDK(object o)
@@ -137,6 +157,11 @@ namespace F8Framework.Core
             LogColor("[模块日志]", color1, s, p);
         }
         
+        public static void LogModule(string s)
+        {
+            LogColor("[模块日志]", color1, s);
+        }
+        
         public static void LogModule(object o)
         {
             LogColor("[模块日志]", color1, o);
@@ -150,6 +175,11 @@ namespace F8Framework.Core
         public static void LogNet(string s, params object[] p)
         {
             LogColor("[网络日志]", color5, s, p);
+        }
+        
+        public static void LogNet(string s)
+        {
+            LogColor("[网络日志]", color5, s);
         }
         
         public static void LogNet(object o)
@@ -167,6 +197,11 @@ namespace F8Framework.Core
             LogColor("[配置日志]", color7, s, p);
         }
         
+        public static void LogConfig(string s)
+        {
+            LogColor("[配置日志]", color7, s);
+        }
+        
         public static void LogConfig(object o)
         {
             LogColor("[配置日志]", color7, o);
@@ -180,6 +215,11 @@ namespace F8Framework.Core
         public static void LogView(string s, params object[] p)
         {
             LogColor("[视图日志]", color12, s, p);
+        }
+        
+        public static void LogView(string s)
+        {
+            LogColor("[视图日志]", color12, s);
         }
         
         public static void LogView(object o)
@@ -197,6 +237,11 @@ namespace F8Framework.Core
             LogColor("[事件日志]", color13, s, p);
         }
         
+        public static void LogEvent(string s)
+        {
+            LogColor("[事件日志]", color13, s);
+        }
+        
         public static void LogEvent(object o)
         {
             LogColor("[事件日志]", color13, o);
@@ -212,6 +257,11 @@ namespace F8Framework.Core
             LogColor("[实体日志]", color3, s, p);
         }
         
+        public static void LogEntity(string s)
+        {
+            LogColor("[实体日志]", color3, s);
+        }
+        
         public static void LogEntity(object o)
         {
             LogColor("[实体日志]", color3, o);
@@ -225,6 +275,11 @@ namespace F8Framework.Core
         public static void LogAsset(string s, params object[] p)
         {
             LogColor("[资产日志]", color14, s, p);
+        }
+        
+        public static void LogAsset(string s)
+        {
+            LogColor("[资产日志]", color14, s);
         }
         
         public static void LogAsset(object o)
@@ -294,6 +349,11 @@ namespace F8Framework.Core
             Debug.LogAssertion((p != null && p.Length > 0 ? string.Format(s, p) : s));
         }
         
+        public static void LogAssertion(string s)
+        {
+            Debug.LogAssertion(s);
+        }
+        
         public static void LogAssertion(object o)
         {
             Debug.LogAssertion(o);
@@ -309,6 +369,11 @@ namespace F8Framework.Core
             Debug.LogWarning((p != null && p.Length > 0 ? string.Format(s, p) : s));
         }
         
+        public static void LogWarning(string s)
+        {
+            Debug.LogWarning(s);
+        }
+        
         public static void LogWarning(object o)
         {
             Debug.LogWarning(o);
@@ -322,6 +387,11 @@ namespace F8Framework.Core
         public static void LogError(string s, params object[] p)
         {
             Debug.LogError((p != null && p.Length > 0 ? string.Format(s, p) : s));
+        }
+        
+        public static void LogError(string s)
+        {
+            Debug.LogError(s);
         }
         
         public static void LogError(object o)
@@ -445,13 +515,7 @@ namespace F8Framework.Core
             get
             {
 #if UNITY_EDITOR
-            #if UNITY_5_6_OR_NEWER
-                return (UnityEngine.Profiling.Profiler.usedHeapSizeLong / 1024).ToString() + " kb";
-            #elif UNITY_5_5_OR_NEWER
-                return (UnityEngine.Profiling.Profiler.usedHeapSize / 1024).ToString() + " kb";
-            #else
-                return (Profiler.usedHeapSize / 1024).ToString() + " kb";
-            #endif
+            return Util.Converter.FormatBytes(UnityEngine.Profiling.Profiler.GetMonoUsedSizeLong());
 #else
             return "0";
 #endif

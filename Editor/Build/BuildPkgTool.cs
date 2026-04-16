@@ -50,6 +50,7 @@ namespace F8Framework.Core.Editor
         private static bool _enableOptionalPackage = false;
         private static bool _enableNullPackage = false;
         private static string _optionalPackage = "0_1_2_3";
+        private static string _optionalPackagePassword = "";
         private static string _assetRemoteAddress = ""; //"http://127.0.0.1:6789/"
         private static bool _enablePackage = false;
         private static bool _enableFullPathAssetLoading = false;
@@ -114,6 +115,7 @@ namespace F8Framework.Core.Editor
             string androidKeyAliasName = GetArgValue(args, "AndroidKeyAliasName-");
             string androidKeyAliasPass = GetArgValue(args, "AndroidKeyAliasPass-");
             bool cleanBuildCache = GetArgValue(args, "CleanBuildCache-").Equals("true", StringComparison.OrdinalIgnoreCase);
+            string optionalPackagePassword = GetArgValue(args, "OptionalPackagePassword-");
 
             F8EditorPrefs.SetBool(_exportCurrentPlatformKey, false);
             F8EditorPrefs.SetString(_exportPlatformKey, platformStr);
@@ -152,6 +154,8 @@ namespace F8Framework.Core.Editor
             F8EditorPrefs.SetString(_androidKeyAliasPassKey, androidKeyAliasPass);
             _androidKeyAliasPass = androidKeyAliasPass;
             F8EditorPrefs.SetBool(CleanBuildCacheKey, cleanBuildCache);
+            F8GamePrefs.SetString(nameof(F8GameConfig.OptionalPackagePassword), optionalPackagePassword);
+            _optionalPackagePassword = optionalPackagePassword;
             
             WriteGameVersion();
             Build();
@@ -267,6 +271,8 @@ namespace F8Framework.Core.Editor
             
             string optionalPackage = F8EditorPrefs.GetString(_optionalPackageKey, "");
             
+            string optionalPackagePassword = F8GamePrefs.GetString(nameof(F8GameConfig.OptionalPackagePassword), "");
+            
             switch (buildTarget)
             {
                 case BuildTarget.StandaloneWindows:
@@ -296,7 +302,7 @@ namespace F8Framework.Core.Editor
             bool enableNullPackage = F8EditorPrefs.GetBool(_enableNullPackageKey, false);
             
             BuildOptions buildOptions = BuildOptions.None;
-            if (F8EditorPrefs.GetBool("compilationFinishedBuildRun"))
+            if (SessionState.GetBool("compilationFinishedBuildRun", false))
             {
                 buildOptions |= BuildOptions.AutoRunPlayer;
             }
@@ -332,7 +338,7 @@ namespace F8Framework.Core.Editor
             // 分包
             if (enableOptionalPackage)
             {
-                string toPath = FileTools.TruncatePath(Application.dataPath, 1) + "/temp_OptionalPackage";
+                string toPath = FileTools.TruncatePath(Application.dataPath, 1) + "/Library/F8BuildOptionalPackage";
                 FileTools.SafeDeleteDir(toPath);
                 Dictionary<string, AssetBundleMap.AssetMapping> mappings = 
                     Util.LitJson.ToObject<Dictionary<string, AssetBundleMap.AssetMapping>>(Resources.Load<TextAsset>(nameof(AssetBundleMap)).ToString());
@@ -351,12 +357,12 @@ namespace F8Framework.Core.Editor
                     Util.ZipHelper.IZipCallback zipCb = new Util.ZipHelper.ZipResult();
                     string[] paths = { packagePath };
                     string zipName = packagePath + HotUpdateManager.Separator + package + ".zip";
-                    Util.ZipHelper.Zip(paths, zipName, null, zipCb);
+                    Util.ZipHelper.Zip(paths, zipName, optionalPackagePassword, zipCb);
 
                     FileTools.SafeDeleteDir(packagePath);
                     LogF8.LogVersion("分包输出目录：" + zipName + " ，手动上传至CDN资源服务器。");
                 }
-               
+                WriteGameVersion();
                 AssetDatabase.Refresh();
                 string locationPathName = buildPath + "/" + buildTarget.ToString() + "_Optional_" + toVersion  + "/" + appName;
                 locationPathName = FileTools.FormatToUnityPath(locationPathName);
@@ -396,11 +402,18 @@ namespace F8Framework.Core.Editor
                 FileTools.CheckFileAndCreateDirWhenNeeded(assetBundleMapPath);
                 FileTools.SafeWriteAllText(assetBundleMapPath, Util.LitJson.ToJson(resAssetBundleMappings));
                 
-                string toPath = FileTools.TruncatePath(Application.dataPath, 1) + "/temp_NullPackage";
+                string toPath = FileTools.TruncatePath(Application.dataPath, 1) + "/Library/F8BuildNullPackage";
                 FileTools.SafeDeleteDir(toPath);
-                FileTools.SafeCopyDirectory(URLSetting.GetAssetBundlesStreamPath(), toPath, true, new[] { URLSetting.GetPlatformName(), URLSetting.GetPlatformName() + ".manifest" });
-                FileTools.SafeDeleteDir(URLSetting.GetAssetBundlesStreamPath(),
-                    new[] { URLSetting.GetPlatformName(), URLSetting.GetPlatformName() + ".manifest" });
+                FileTools.SafeCopyDirectory(URLSetting.GetAssetBundlesStreamPath(), toPath, true, new[]
+                {
+                    resAssetBundleMappings.GetOrDefault(URLSetting.GetPlatformName()).AbName,
+                    resAssetBundleMappings.GetOrDefault(URLSetting.GetPlatformName()).AbName + ".manifest"
+                });
+                FileTools.SafeDeleteDir(URLSetting.GetAssetBundlesStreamPath(), new[]
+                {
+                    resAssetBundleMappings.GetOrDefault(URLSetting.GetPlatformName()).AbName,
+                    resAssetBundleMappings.GetOrDefault(URLSetting.GetPlatformName()).AbName + ".manifest"
+                });
                 AssetDatabase.Refresh();
                 string locationPathName = buildPath + "/" + buildTarget.ToString() + "_Null_" + toVersion  + "/" + appName;
                 locationPathName = FileTools.FormatToUnityPath(locationPathName);
@@ -419,7 +432,11 @@ namespace F8Framework.Core.Editor
                 {
                     LogF8.LogError($"导出失败了，检查一下 Unity 内置的 Build Settings 导出的路径是否存在，并使用 Unity 内置打包工具打包一次，或 Unity 没有给我清理缓存，尝试使用 Clean 打包模式！: {buildReport.summary.result}");
                 }
-                FileTools.SafeCopyDirectory(toPath, URLSetting.GetAssetBundlesStreamPath(), true, new[] { URLSetting.GetPlatformName(), URLSetting.GetPlatformName() + ".manifest" });
+                FileTools.SafeCopyDirectory(toPath, URLSetting.GetAssetBundlesStreamPath(), true, new[]
+                {
+                    resAssetBundleMappings.GetOrDefault(URLSetting.GetPlatformName()).AbName,
+                    resAssetBundleMappings.GetOrDefault(URLSetting.GetPlatformName()).AbName + ".manifest"
+                });
                 FileTools.SafeDeleteDir(toPath);
                 LogF8.LogVersion("游戏空包打包成功! " + locationPathName);
             }
@@ -900,13 +917,23 @@ namespace F8Framework.Core.Editor
             }
             GUILayout.Space(10);
 
+            GUILayout.BeginHorizontal();
             bool enablePackageValue = F8EditorPrefs.GetBool(_enablePackageKey, false);
-            _enablePackage = EditorGUILayout.Toggle("启用分包", enablePackageValue);
+            _enablePackage = EditorGUILayout.Toggle("启用分包", enablePackageValue, GUILayout.Width(180));
             if (enablePackageValue != _enablePackage)
             {
                 F8EditorPrefs.SetBool(_enablePackageKey, _enablePackage);
             }
-
+            GUILayout.Label("分包zip加密：", GUILayout.Width(90));
+            string optionalPackagePasswordValue = F8GamePrefs.GetString(nameof(F8GameConfig.OptionalPackagePassword), "");
+            if (string.IsNullOrEmpty(optionalPackagePasswordValue))
+            {
+                optionalPackagePasswordValue = _optionalPackagePassword;
+            }
+            _optionalPackagePassword = EditorGUILayout.TextField(optionalPackagePasswordValue);
+            F8GamePrefs.SetString(nameof(F8GameConfig.OptionalPackagePassword), _optionalPackagePassword);
+            GUILayout.EndHorizontal();
+            
             GUILayout.Space(5);
             GUILayout.Box("", GUILayout.Height(2), GUILayout.ExpandWidth(true));
             GUILayout.Space(5);
@@ -1002,8 +1029,8 @@ namespace F8Framework.Core.Editor
                     string countent = "确定构建版本 " + _toVersion;
                     if (EditorUtility.DisplayDialog("打包游戏", countent, "确定", "取消"))
                     {
-                        F8EditorPrefs.SetBool("compilationFinishedBuildPkg", true);
-                        F8EditorPrefs.SetBool("compilationFinishedBuildRun", false);
+                        SessionState.SetBool("compilationFinishedBuildPkg", true);
+                        SessionState.SetBool("compilationFinishedBuildRun", false);
                         EditorApplication.delayCall += WriteGameVersion;
                         EditorApplication.delayCall += F8Helper.F8Run;
                     }
@@ -1028,8 +1055,8 @@ namespace F8Framework.Core.Editor
                     string countent = "确定构建热更新包版本 " + _toVersion;
                     if (EditorUtility.DisplayDialog("构建热更新包", countent, "确定", "取消"))
                     {
-                        F8EditorPrefs.SetBool("compilationFinishedBuildUpdate", true);
-                        F8EditorPrefs.SetBool("compilationFinishedBuildRun", false);
+                        SessionState.SetBool("compilationFinishedBuildUpdate", true);
+                        SessionState.SetBool("compilationFinishedBuildRun", false);
                         EditorApplication.delayCall += F8Helper.F8Run;
                     }
                 }
@@ -1062,8 +1089,8 @@ namespace F8Framework.Core.Editor
                     string countent = "确定构建版本 " + _toVersion;
                     if (EditorUtility.DisplayDialog("打包游戏", countent, "确定", "取消"))
                     {
-                        F8EditorPrefs.SetBool("compilationFinishedBuildPkg", true);
-                        F8EditorPrefs.SetBool("compilationFinishedBuildRun", true);
+                        SessionState.SetBool("compilationFinishedBuildPkg", true);
+                        SessionState.SetBool("compilationFinishedBuildRun", true);
                         EditorApplication.delayCall += WriteGameVersion;
                         EditorApplication.delayCall += F8Helper.F8Run;
                     }
@@ -1230,7 +1257,29 @@ namespace F8Framework.Core.Editor
             {
                 packageList = new List<string>();
             }
-            GameVersion gameVersion = new GameVersion(toVersion, assetRemoteAddress, enableHotUpdate, new List<string>(), _enablePackage, packageList);
+
+            Dictionary<string, (long size, string md5)> subPackageInfo = new Dictionary<string, (long size, string md5)>();
+            if (_enablePackage && packageList.Count > 0)
+            {
+                string remotePackageDir = buildPath + HotUpdateManager.RemoteDirName + HotUpdateManager.PackageDirName;
+                foreach (var package in packageList)
+                {
+                    if (string.IsNullOrEmpty(package))
+                    {
+                        continue;
+                    }
+
+                    string packageZipPath = remotePackageDir + HotUpdateManager.Separator + package + ".zip";
+                    if (File.Exists(packageZipPath))
+                    {
+                        string md5 = FileTools.CreateMd5ForFile(packageZipPath);
+                        long size = new FileInfo(packageZipPath).Length;
+                        subPackageInfo[package] = (size, md5);
+                    }
+                }
+            }
+
+            GameVersion gameVersion = new GameVersion(toVersion, assetRemoteAddress, enableHotUpdate, new List<string>(), _enablePackage, packageList, subPackageInfo);
             // 写入到文件
             string gameVersionResourcesPath = Application.dataPath + "/F8Framework/AssetMap/Resources/" + nameof(GameVersion) + ".json";
             // 序列化对象

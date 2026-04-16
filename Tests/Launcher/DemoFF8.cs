@@ -26,12 +26,12 @@ namespace F8Framework.Tests
         // 资产管理
         private static AssetManager _asset;
         // 读取配置表-->使用了资产模块
-        private static DemoF8DataManager _config;
+        private static F8DataManager _config;
         // 音频管理-->使用了资产模块-->使用了游戏对象池模块-->使用了补间动画模块-->使用了时间模块
         private static AudioManager _audio;
         // 补间动画
         private static Tween _tween;
-        // UI界面管理-->使用了资产模块
+        // UI界面管理-->使用了资产模块-->使用了补间动画模块
         private static UIManager _ui;
         // 本地化-->使用了配置模块-->使用了资产模块
         private static Localization _localization;
@@ -160,7 +160,6 @@ namespace F8Framework.Tests
                 if (_gameObjectPool == null)
                 {
                     _gameObjectPool = ModuleCenter.CreateModule<GameObjectPool>();
-                    ModuleCenter.CreateModule<F8PoolGlobal>();
                 }
                     
                 return _gameObjectPool;
@@ -170,7 +169,6 @@ namespace F8Framework.Tests
                 if (_gameObjectPool == null)
                 {
                     _gameObjectPool = value;
-                    ModuleCenter.CreateModule<F8PoolGlobal>();
                 }
             }
         }
@@ -190,12 +188,12 @@ namespace F8Framework.Tests
             }
         }
         
-        public static DemoF8DataManager Config
+        public static F8DataManager Config
         {
             get
             {
                 if (_config == null)
-                    _config = ModuleCenter.CreateModule<DemoF8DataManager>();
+                    _config = ModuleCenter.CreateModule<F8DataManager>();
                 return _config;
             }
             set
@@ -255,7 +253,7 @@ namespace F8Framework.Tests
             get
             {
                 if (_localization == null)
-                    _localization = ModuleCenter.CreateModule<Localization>();
+                    _localization = ModuleCenter.CreateModule<Localization>(F8DataManager.Instance.GetLocalizedStrings());
                 return _localization;
             }
             set

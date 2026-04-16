@@ -18,12 +18,15 @@ namespace F8Framework.Core
             RegisterVirtualAxis(InputAxisType.MouseY);
             RegisterVirtualAxis(InputAxisType.MouseScrollWheel);
             RegisterVirtualAxis(InputAxisType.Horizontal);
+            RegisterVirtualAxis(InputAxisType.HorizontalRaw);
             RegisterVirtualAxis(InputAxisType.Vertical);
+            RegisterVirtualAxis(InputAxisType.VerticalRaw);
             RegisterVirtualAxis(InputAxisType.UpperLower);
         }
 
         public override void OnRun()
         {
+#if ENABLE_LEGACY_INPUT_MANAGER
             if (UnityEngine.Input.touchCount == 1 && UnityEngine.Input.GetTouch(0).phase == TouchPhase.Began)
             {
                 SetButtonStart(InputButtonType.MouseLeft);
@@ -72,6 +75,7 @@ namespace F8Framework.Core
             {
                 SetVirtualMousePosition(Vector3.zero);
             }
+#endif
         }
 
         public override void OnShutdown()
@@ -85,7 +89,9 @@ namespace F8Framework.Core
             UnRegisterVirtualAxis(InputAxisType.MouseY);
             UnRegisterVirtualAxis(InputAxisType.MouseScrollWheel);
             UnRegisterVirtualAxis(InputAxisType.Horizontal);
+            UnRegisterVirtualAxis(InputAxisType.HorizontalRaw);
             UnRegisterVirtualAxis(InputAxisType.Vertical);
+            UnRegisterVirtualAxis(InputAxisType.VerticalRaw);
             UnRegisterVirtualAxis(InputAxisType.UpperLower);
         }
     }

@@ -26,6 +26,7 @@ namespace F8Framework.Core
 		private Action OnComplete = null;
 		
 		public Action Recycle { get; set; }
+		public bool HasTweens => tweenList.Count > 0 || commandQueue.Count > 0;
 
 		public Sequence()
 		{
@@ -264,7 +265,7 @@ namespace F8Framework.Core
 		/// <summary>使用此方法在协程中等待Sequence。</summary>
 		/// <example><code>
 		/// IEnumerator Coroutine() {
-		///		var sequence = SequenceManager.GetSequence();
+		///		var sequence = FF8.Tween.GetSequence();
 		///		var baseTween = gameObject.Move(Vector3.one, 1f);
 		///		sequence.Append(baseTween);
 		///		yield return sequence;
@@ -289,7 +290,7 @@ namespace F8Framework.Core
 		/// <summary>此方法是异步/等待支持所必需的。不要直接使用它。</summary>
 		/// <example><code>
 		/// async void Coroutine() {
-		///		var sequence = SequenceManager.GetSequence();
+		///		var sequence = FF8.Tween.GetSequence();
 		///		var baseTween = gameObject.Move(Vector3.one, 1f);
 		///		sequence.Append(baseTween);
 		///     await sequence;

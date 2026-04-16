@@ -31,7 +31,7 @@ namespace F8Framework.Launcher
             FF8.Tween = ModuleCenter.CreateModule<Tween>();
             FF8.UI = ModuleCenter.CreateModule<UIManager>();
             yield return F8DataManager.Instance.LoadLocalizedStringsIEnumerator(); // 加载 LocalizedStrings 配置表，必须在 Localization 模块上面
-            FF8.Local = ModuleCenter.CreateModule<Localization>();
+            FF8.Local = ModuleCenter.CreateModule<Localization>(F8DataManager.Instance.GetLocalizedStrings());
             FF8.SDK = ModuleCenter.CreateModule<SDKManager>();
             FF8.Download = ModuleCenter.CreateModule<DownloadManager>();
             FF8.LogWriter = ModuleCenter.CreateModule<F8LogWriter>();
@@ -50,19 +50,19 @@ namespace F8Framework.Launcher
 
         void Update()
         {
-            // 更新模块
+            // 更新模块，切勿多处调用
             ModuleCenter.Update();
         }
 
         void LateUpdate()
         {
-            // 更新模块
+            // 更新模块，切勿多处调用
             ModuleCenter.LateUpdate();
         }
 
         void FixedUpdate()
         {
-            // 更新模块
+            // 更新模块，切勿多处调用
             ModuleCenter.FixedUpdate();
         }
     }

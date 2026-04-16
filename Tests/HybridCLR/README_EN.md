@@ -11,10 +11,10 @@ Method 2: Unity → Menu Bar → Window → Package Manager → "+" → Add Pack
 
 ## Introduction (Simply press F8 to start game development without distractions)
 **Integrated HybridCLR Hot Update Code Component**
-1. First, follow this[ Official Quickstart Guide ](https://hybridclr.doc.code-philosophy.com/docs/beginner/quickstart)to create a HotUpdate assembly
+1. First, follow this[ Official Quickstart Guide ](https://www.hybridclr.cn/docs/beginner/quickstart)to create a HotUpdate assembly
 2. Locate the[ F8Helper.cs ](https://github.com/TippingGame/F8Framework/blob/main/Editor/F8Helper/F8Helper.cs)code file:
    * Uncomment the following code section
-3. Add metadata - see[ Official Generic Types Tutorial ](https://hybridclr.doc.code-philosophy.com/docs/beginner/generic)
+3. Add metadata - see[ Official Generic Types Tutorial ](https://www.hybridclr.cn/docs/beginner/generic)
 
 ```C#
 // Metadata supplementation - DLLs here won't be hot updated. Typically found in {project}/HybridCLRData/AssembliesPostIl2CppStrip/{target}
@@ -31,34 +31,42 @@ public static List<string> AOTDllList = new List<string>
 [MenuItem("开发工具/3: 生成并复制热更新Dll-F8", false, 210)]
 public static void GenerateCopyHotUpdateDll()
 {
-    // F8EditorPrefs.SetBool("compilationFinishedHotUpdateDll", false);
+    // SessionState.SetBool("compilationFinishedHotUpdateDll", false);
+    //
+    // // Only execute commands using HybridCLR (choose one)
     // HybridCLR.Editor.Commands.PrebuildCommand.GenerateAll();
+    // // Execute commands using both HybridCLR and Obfuz (choose one)
+    // // Obfuz4HybridCLR.PrebuildCommandExt.GenerateAll();
     //
     // string outpath = Application.dataPath + "/AssetBundles/Code/";
     //
     // FileTools.SafeClearDir(outpath);
     // FileTools.CheckDirAndCreateWhenNeeded(outpath);
-    // foreach (var dll in HybridCLR.Editor.SettingsUtil.HotUpdateAssemblyNamesExcludePreserved) // 获取HybridCLR设置面板的dll名称
+    // foreach (var dll in HybridCLR.Editor.SettingsUtil.HotUpdateAssemblyNamesIncludePreserved) // 获取HybridCLR设置面板的dll名称
     // {
-    //     var path =
-    //         HybridCLR.Editor.SettingsUtil.GetHotUpdateDllsOutputDirByTarget(EditorUserBuildSettings
-    //             .activeBuildTarget) + "/" + dll + ".dll";
-    //     FileTools.SafeCopyFile(
-    //         HybridCLR.Editor.SettingsUtil.GetHotUpdateDllsOutputDirByTarget(EditorUserBuildSettings.activeBuildTarget) + "/" + dll + ".dll",
-    //         outpath + dll + ".bytes");
-    //     LogF8.LogAsset("生成并复制热更新dll：" + dll);
+    //     var path = HybridCLR.Editor.SettingsUtil.GetHotUpdateDllsOutputDirByTarget(
+    //         EditorUserBuildSettings.activeBuildTarget) + "/" + dll + ".dll";
+    //
+    //     // Uncomment to use both HybridCLR and Obfuz
+    //     // if (Obfuz.Settings.ObfuzSettings.Instance.assemblySettings.GetObfuscationRelativeAssemblyNames().Contains(dll))
+    //     // {
+    //     //     path = Obfuz4HybridCLR.PrebuildCommandExt.GetObfuscatedHotUpdateAssemblyOutputPath(
+    //     //         EditorUserBuildSettings.activeBuildTarget) + "/" + dll + ".dll";
+    //     // }
+    //     
+    //     FileTools.SafeCopyFile(path, outpath + dll + ".bytes");
+    //     LogF8.LogAsset("Generate and copy hot update dll: " + dll);
     // }
     //
     // foreach (var aotDllName in F8Helper.AOTDllList)
     // {
-    //     var mscorlibsouPath =
-    //         HybridCLR.Editor.SettingsUtil.GetAssembliesPostIl2CppStripDir(EditorUserBuildSettings
-    //             .activeBuildTarget) + "/" + aotDllName;
+    //     var mscorlibsouPath = HybridCLR.Editor.SettingsUtil.GetAssembliesPostIl2CppStripDir(
+    //         EditorUserBuildSettings.activeBuildTarget) + "/" + aotDllName;
     //     
     //     FileTools.SafeCopyFile(
     //         mscorlibsouPath,
     //         outpath + aotDllName + "by.bytes");
-    //     LogF8.LogAsset("生成并复制补充元数据dll：" + aotDllName);
+    //     LogF8.LogAsset("Generate and copy supplementary metadata dll: " + aotDllName);
     // }
     //
     // AssetDatabase.Refresh();
@@ -91,6 +99,7 @@ public class LoadDll : MonoBehaviour
         HotUpdateManager HotUpdate = ModuleCenter.CreateModule<HotUpdateManager>();
         DownloadManager DownloadManager = ModuleCenter.CreateModule<DownloadManager>();
         AssetManager AssetManager = ModuleCenter.CreateModule<AssetManager>();
+        yield return AssetBundleManager.Instance.LoadAssetBundleManifest();
         
         // Initialize local version
         HotUpdate.InitLocalVersion();
@@ -102,12 +111,10 @@ public class LoadDll : MonoBehaviour
         yield return HotUpdate.InitAssetVersion();
             
         // Check resources needing updates
-        Tuple<Dictionary<string, string>, long> result  = HotUpdate.CheckHotUpdate();
-        var hotUpdateAssetUrl = result.Item1;
-        var allSize = result.Item2;
+        var (downloadInfos, allSize) = HotUpdate.CheckHotUpdate();
         
         // Execute hot update
-        HotUpdate.StartHotUpdate(hotUpdateAssetUrl, () =>
+        HotUpdate.StartHotUpdate(downloadInfos, () =>
         {
             LogF8.Log("Complete");
             // Optional metadata supplementation
@@ -145,27 +152,33 @@ public class LoadDll : MonoBehaviour
         }, () =>
         {
             LogF8.Log("Failed");
-        }, progress =>
+        }, eventArgs =>
         {
-            LogF8.Log("Progress: " + progress);
+            long downloadedBytes = eventArgs.TotalDownloadedLength;
+            double speedBytesPerSecond = eventArgs.DownloadInfo.DownloadedLength / eventArgs.DownloadInfo.DownloadTimeSpan.TotalSeconds;
+            LogF8.Log($"Progress: {downloadedBytes}B/{allSize}B, Speed: {speedBytesPerSecond}B/s");
         });
     }
     void Update()
     {
-        // Update module
+        // Update module, do not call from multiple places.
         ModuleCenter.Update();
     }
 
     void LateUpdate()
     {
-        // Update module
+        // Update module, do not call from multiple places.
         ModuleCenter.LateUpdate();
     }
 
     void FixedUpdate()
     {
-        // Update module
+        // Update module, do not call from multiple places.
         ModuleCenter.FixedUpdate();
     }
 }
 ```
+### Frequently Asked Questions:
+1. Packaging HybridCLR takes a long time. After the first execution, you can switch to this API: `HybridCLR.Editor.Commands.CompileDllCommand.CompileDll(EditorUserBuildSettings.activeBuildTarget);`
+   * If Obfuz is enabled, you can use this API instead: `Obfuz4HybridCLR.PrebuildCommandExt.CompileAndObfuscateDll();`
+   * [Reference Documentation (Working with HybridCLR)](https://www.obfuz.com/docs/manual/hybridclr/work-with-hybridclr)

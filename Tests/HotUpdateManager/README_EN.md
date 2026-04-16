@@ -27,9 +27,10 @@ Method 2: Unity → Menu Bar → Window → Package Manager → "+" → Add Pack
   * Specify version number
   * Configure remote asset loading URL
   * Enable hot updates
-  * Full build / Subpackage build / Empty build  
-
-![image](https://tippinggame-1257018413.cos.ap-guangzhou.myqcloud.com/TippingGame/HotUpdateManager/ui_20240317214323_3.png)  
+  * Full build / Subpackage build / Empty build
+  * Encrypt
+  * More asset settings
+  ![image](https://tippinggame-1257018413.cos.ap-guangzhou.myqcloud.com/TippingGame/HotUpdateManager/ui_20240317214323_4.png)  
 
 --------------------------
 * For Local Hot Update Testing: Clear temporary files in the sandbox directory before testing.
@@ -48,6 +49,7 @@ IEnumerator Start()
     FF8.HotUpdate = ModuleCenter.CreateModule<HotUpdateManager>();
     FF8.Asset = ModuleCenter.CreateModule<AssetManager>();
     FF8.Download = ModuleCenter.CreateModule<DownloadManager>();
+    yield return AssetBundleManager.Instance.LoadAssetBundleManifest();
     
     // Initialize local version
     FF8.HotUpdate.InitLocalVersion();
@@ -59,12 +61,10 @@ IEnumerator Start()
     yield return FF8.HotUpdate.InitAssetVersion();
     
     // Check resources needing hot updates (returns file list + total size)
-    Tuple<Dictionary<string, string>, long> result = FF8.HotUpdate.CheckHotUpdate();
-    var hotUpdateAssetUrl = result.Item1;
-    var allSize = result.Item2;
+    var (downloadInfos, allSize) = FF8.HotUpdate.CheckHotUpdate();
     
     // Execute hot update
-    FF8.HotUpdate.StartHotUpdate(hotUpdateAssetUrl, () =>
+    FF8.HotUpdate.StartHotUpdate(downloadInfos, () =>
     {
         LogF8.Log("Completed");
     }, () =>
@@ -73,13 +73,13 @@ IEnumerator Start()
     }, eventArgs =>
     {
         // Downloaded size in bytes
-        ulong downloadedBytes = eventArgs.DownloadInfo.DownloadedLength;
+        long downloadedBytes = eventArgs.TotalDownloadedLength;
         
-        // Total size in bytes - needs to accumulate sizes of previously completed tasks
+        // Total size in bytes
         long totalBytes = allSize;
         
         // Download speed calculation in bytes/second
-        double speedBytesPerSecond = downloadedBytes / eventArgs.DownloadInfo.DownloadTimeSpan.TotalSeconds;
+        double speedBytesPerSecond = eventArgs.DownloadInfo.DownloadedLength / eventArgs.DownloadInfo.DownloadTimeSpan.TotalSeconds;
         
         // Unit conversion: bytes → MB
         double downloadedMB = downloadedBytes / (1024.0 * 1024.0);
@@ -90,11 +90,11 @@ IEnumerator Start()
         LogF8.Log($"Progress: {downloadedMB:F2}MB/{totalMB:F2}MB, Speed: {speedMBPerSecond:F2}MB/s");
     });
 
-    // Check unloaded subpackages  
-    List<string> subPackage = FF8.HotUpdate.CheckPackageUpdate(GameConfig.LocalGameVersion.SubPackage);
+    // Check unloaded subpackages (returns prepared download tasks + remaining size)
+    var (packageDownloadTasks, packageAllSize) = FF8.HotUpdate.CheckPackageUpdate(GameConfig.LocalGameVersion.SubPackage);
     
     // Load subpackages
-    FF8.HotUpdate.StartPackageUpdate(subPackage, () =>
+    FF8.HotUpdate.StartPackageUpdate(packageDownloadTasks, () =>
     {
         LogF8.Log("Completed");
     }, () =>
@@ -102,7 +102,7 @@ IEnumerator Start()
         LogF8.Log("Failed");
     }, eventArgs =>
     {
-        // Same as above
+        // Same as above, packageAllSize is the total download size
     });
 }
 ```
