@@ -13,54 +13,56 @@ using UnityEngine.Scripting;
 
 namespace F8Framework.Tests
 {
-	internal class F8DataManager : ModuleSingleton<F8DataManager>, IModule
+	internal class DemoF8DataManager : ModuleSingleton<DemoF8DataManager>, IModule
 	{
 		public string VariantName { get; set; }
-		private Sheet1 p_Sheet1;
-		private Sheet2 p_Sheet2;
-		private LocalizedStrings p_LocalizedStrings;
+		private AssetLoadTracker _assetLoadTracker;
+		private AssetLoadTracker AssetLoadTracker => _assetLoadTracker ??= new AssetLoadTracker();
+		private DemoSheet1 p_Sheet1;
+		private DemoSheet2 p_Sheet2;
+		private DemoLocalizedStrings p_LocalizedStrings;
 
 		[Preserve]
-		public Sheet1Item GetSheet1ByID(System.Int32 id)
+		public DemoSheet1Item GetSheet1ByID(System.Int32 id)
 		{
-			Sheet1Item t = null;
+			DemoSheet1Item t = null;
 			p_Sheet1.Dict.TryGetValue(id, out t);
 			if (t == null) LogF8.LogError("找不到id： " + id + " ，配置表： Sheet1");
 			return t;
 		}
 
 		[Preserve]
-		public Dictionary<System.Int32, Sheet1Item> GetSheet1()
+		public Dictionary<System.Int32, DemoSheet1Item> GetSheet1()
 		{
 			return p_Sheet1.Dict;
 		}
 
 		[Preserve]
-		public Sheet2Item GetSheet2ByID(System.Int32 id)
+		public DemoSheet2Item GetSheet2ByID(System.Int32 id)
 		{
-			Sheet2Item t = null;
+			DemoSheet2Item t = null;
 			p_Sheet2.Dict.TryGetValue(id, out t);
 			if (t == null) LogF8.LogError("找不到id： " + id + " ，配置表： Sheet2");
 			return t;
 		}
 
 		[Preserve]
-		public Dictionary<System.Int32, Sheet2Item> GetSheet2()
+		public Dictionary<System.Int32, DemoSheet2Item> GetSheet2()
 		{
 			return p_Sheet2.Dict;
 		}
 
 		[Preserve]
-		public LocalizedStringsItem GetLocalizedStringsByID(System.Int32 id)
+		public DemoLocalizedStringsItem GetLocalizedStringsByID(System.Int32 id)
 		{
-			LocalizedStringsItem t = null;
+			DemoLocalizedStringsItem t = null;
 			p_LocalizedStrings.Dict.TryGetValue(id, out t);
 			if (t == null) LogF8.LogError("找不到id： " + id + " ，配置表： LocalizedStrings");
 			return t;
 		}
 
 		[Preserve]
-		public Dictionary<System.Int32, LocalizedStringsItem> GetLocalizedStrings()
+		public Dictionary<System.Int32, DemoLocalizedStringsItem> GetLocalizedStrings()
 		{
 			return p_LocalizedStrings.Dict;
 		}
@@ -68,7 +70,7 @@ namespace F8Framework.Tests
 		[Preserve]
 		public void LoadLocalizedStrings()
 		{
-			p_LocalizedStrings = Load<LocalizedStrings>("LocalizedStrings") as LocalizedStrings;
+			p_LocalizedStrings = Load<DemoLocalizedStrings>("LocalizedStrings") as DemoLocalizedStrings;
 		}
 
 		[Preserve]
@@ -80,16 +82,16 @@ namespace F8Framework.Tests
 		[Preserve]
 		public IEnumerator LoadLocalizedStringsIEnumerator(Action onLoadComplete = null)
 		{
-			yield return LoadAsync<LocalizedStrings>("LocalizedStrings", result => p_LocalizedStrings = result as LocalizedStrings);
+			yield return LoadAsync<DemoLocalizedStrings>("LocalizedStrings", result => p_LocalizedStrings = result as DemoLocalizedStrings);
 			onLoadComplete?.Invoke();
 		}
 
 		[Preserve]
 		public void LoadAll()
 		{
-			p_Sheet1 = Load<Sheet1>("Sheet1") as Sheet1;
-			p_Sheet2 = Load<Sheet2>("Sheet2") as Sheet2;
-			p_LocalizedStrings = Load<LocalizedStrings>("LocalizedStrings") as LocalizedStrings;
+			p_Sheet1 = Load<DemoSheet1>("Sheet1") as DemoSheet1;
+			p_Sheet2 = Load<DemoSheet2>("Sheet2") as DemoSheet2;
+			p_LocalizedStrings = Load<DemoLocalizedStrings>("LocalizedStrings") as DemoLocalizedStrings;
 		}
 
 		[Preserve]
@@ -100,17 +102,17 @@ namespace F8Framework.Tests
 				objs = new Dictionary<string, object>();
 				ReadExcel.Instance.LoadAllExcelData(objs);
 			}
-			p_Sheet1 = objs["Sheet1"] as Sheet1;
-			p_Sheet2 = objs["Sheet2"] as Sheet2;
-			p_LocalizedStrings = objs["LocalizedStrings"] as LocalizedStrings;
+			p_Sheet1 = objs["Sheet1"] as DemoSheet1;
+			p_Sheet2 = objs["Sheet2"] as DemoSheet2;
+			p_LocalizedStrings = objs["LocalizedStrings"] as DemoLocalizedStrings;
 		}
 
 		[Preserve]
 		public IEnumerable LoadAllAsync()
 		{
-			yield return LoadAsync<Sheet1>("Sheet1", result => p_Sheet1 = result as Sheet1);
-			yield return LoadAsync<Sheet2>("Sheet2", result => p_Sheet2 = result as Sheet2);
-			yield return LoadAsync<LocalizedStrings>("LocalizedStrings", result => p_LocalizedStrings = result as LocalizedStrings);
+			yield return LoadAsync<DemoSheet1>("Sheet1", result => p_Sheet1 = result as DemoSheet1);
+			yield return LoadAsync<DemoSheet2>("Sheet2", result => p_Sheet2 = result as DemoSheet2);
+			yield return LoadAsync<DemoLocalizedStrings>("LocalizedStrings", result => p_LocalizedStrings = result as DemoLocalizedStrings);
 #if UNITY_EDITOR
 			if (AssetManager.Instance.IsEditorMode)
 			{
@@ -122,9 +124,9 @@ namespace F8Framework.Tests
 		[Preserve]
 		public async Task LoadAllAsyncTask()
 		{
-			await LoadAsyncTask<Sheet1>("Sheet1", result => p_Sheet1 = result as Sheet1);
-			await LoadAsyncTask<Sheet2>("Sheet2", result => p_Sheet2 = result as Sheet2);
-			await LoadAsyncTask<LocalizedStrings>("LocalizedStrings", result => p_LocalizedStrings = result as LocalizedStrings);
+			await LoadAsyncTask<DemoSheet1>("Sheet1", result => p_Sheet1 = result as DemoSheet1);
+			await LoadAsyncTask<DemoSheet2>("Sheet2", result => p_Sheet2 = result as DemoSheet2);
+			await LoadAsyncTask<DemoLocalizedStrings>("LocalizedStrings", result => p_LocalizedStrings = result as DemoLocalizedStrings);
 #if UNITY_EDITOR
 			if (AssetManager.Instance.IsEditorMode)
 			{
@@ -142,9 +144,9 @@ namespace F8Framework.Tests
 		[Preserve]
 		public IEnumerator LoadAllAsyncIEnumerator(Action onLoadComplete = null)
 		{
-			yield return LoadAsync<Sheet1>("Sheet1", result => p_Sheet1 = result as Sheet1);
-			yield return LoadAsync<Sheet2>("Sheet2", result => p_Sheet2 = result as Sheet2);
-			yield return LoadAsync<LocalizedStrings>("LocalizedStrings", result => p_LocalizedStrings = result as LocalizedStrings);
+			yield return LoadAsync<DemoSheet1>("Sheet1", result => p_Sheet1 = result as DemoSheet1);
+			yield return LoadAsync<DemoSheet2>("Sheet2", result => p_Sheet2 = result as DemoSheet2);
+			yield return LoadAsync<DemoLocalizedStrings>("LocalizedStrings", result => p_LocalizedStrings = result as DemoLocalizedStrings);
 #if UNITY_EDITOR
 			if (AssetManager.Instance.IsEditorMode)
 			{
@@ -157,12 +159,12 @@ namespace F8Framework.Tests
 		[Preserve]
 		public T Load<T>(string name)
 		{
-			TextAsset textAsset = AssetManager.Instance.Load<TextAsset>(name);
+			TextAsset textAsset = AssetLoadTracker.Load<TextAsset>(name);
 			if (textAsset == null)
 			{
 				return default(T);
 			}
-			AssetManager.Instance.Unload(name, false);
+			UnloadAsset(name, false);
 			T obj = Util.BinarySerializer.Deserialize<T>(textAsset.bytes);
 			return obj;
 		}
@@ -170,29 +172,42 @@ namespace F8Framework.Tests
 		[Preserve]
 		public IEnumerator LoadAsync<T>(string name, Action<T> callback)
 		{
-			var load = AssetManager.Instance.LoadAsync<TextAsset>(name);
-			yield return load;
-			TextAsset textAsset = AssetManager.Instance.GetAssetObject<TextAsset>(name);
+			TextAsset textAsset = null;
+			yield return AssetLoadTracker.LoadAsync<TextAsset>(name, result => textAsset = result);
 			if (textAsset != null)
 			{
-				AssetManager.Instance.Unload(name, false);
+				UnloadAsset(name, false);
 				T obj = Util.BinarySerializer.Deserialize<T>(textAsset.bytes);
-				callback(obj);
+				callback?.Invoke(obj);
 			}
 		}
 
 		[Preserve]
 		public async Task LoadAsyncTask<T>(string name, Action<T> callback)
 		{
-			BaseLoader load = AssetManager.Instance.LoadAsync<TextAsset>(name);
+			TextAsset textAsset = null;
+			BaseLoader load = AssetLoadTracker.LoadAsync<TextAsset>(name, result => textAsset = result);
 			await load;
-			TextAsset textAsset = AssetManager.Instance.GetAssetObject<TextAsset>(name);
 			if (textAsset != null)
 			{
-				AssetManager.Instance.Unload(name, false);
+				UnloadAsset(name, false);
 				T obj = Util.BinarySerializer.Deserialize<T>(textAsset.bytes);
-				callback(obj);
+				callback?.Invoke(obj);
 			}
+		}
+
+		public void UnloadAsset(string name, bool unloadAllLoadedObjects = false)
+		{
+			_assetLoadTracker?.Release(name, unloadAllLoadedObjects);
+		}
+
+		public void ClearAssetLoadTracker(bool unloadAllLoadedObjects = false)
+		{
+			if (_assetLoadTracker == null)
+				return;
+
+			_assetLoadTracker.ReleaseAll(unloadAllLoadedObjects);
+			_assetLoadTracker = null;
 		}
 
 		public void OnInit(object createParam)
@@ -217,6 +232,11 @@ namespace F8Framework.Tests
 
 		public void OnTermination()
 		{
+			ClearAssetLoadTracker(true);
+			p_Sheet1 = null;
+			p_Sheet2 = null;
+			p_LocalizedStrings = null;
+			VariantName = null;
 			base.Destroy();
 		}
 	}

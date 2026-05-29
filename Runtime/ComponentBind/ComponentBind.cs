@@ -258,10 +258,13 @@ namespace F8Framework.Core
             {
                 // 替换注释之间的内容，包含头尾的注释
                 scriptContent = scriptContent.Remove(match.Groups[0].Index, match.Groups[0].Length);
+                string generatedFieldsCode = generatedCode.Length > 0
+                    ? $"\n\t[Header(\"===== 自动生成，组件绑定 =====\")]" + $"\n{generatedCode}"
+                    : string.Empty;
+
                 scriptContent = scriptContent.Insert(match.Groups[0].Index,
                     $"// 自动获取组件（自动生成，不能删除）" +
-                    $"\n\t[Header(\"===== 自动生成，组件绑定 =====\")]" +
-                    $"\n{generatedCode}" +
+                    $"{generatedFieldsCode}" +
                     $"\n{listenerCode}" +
                     $"\n#if UNITY_EDITOR" +
                     $"\n\t// 自动生成" +
@@ -309,7 +312,9 @@ namespace F8Framework.Core
                 "UnityEngine.UI.Dropdown",
                 "UnityEngine.UI.Toggle",
                 "UnityEngine.UI.InputField",
-                "UnityEngine.UI.ScrollRect"
+                "UnityEngine.UI.ScrollRect",
+                "TMPro.TMP_Dropdown",
+                "TMPro.TMP_InputField"
             };
 
             return Array.Exists(listenerTypes, componentType.Equals);
@@ -426,6 +431,14 @@ namespace F8Framework.Core
             {
                 return $"private UnityEngine.Events.UnityAction<Vector2> unityAction_{normalizedFieldName};";
             }
+            else if (componentType.Equals("TMPro.TMP_Dropdown"))
+            {
+                return $"private UnityEngine.Events.UnityAction<int> unityAction_{normalizedFieldName};";
+            }
+            else if (componentType.Equals("TMPro.TMP_InputField"))
+            {
+                return $"private UnityEngine.Events.UnityAction<string> unityAction_{normalizedFieldName};";
+            }
 
             return string.Empty;
         }
@@ -445,7 +458,9 @@ namespace F8Framework.Core
                      componentType.Equals("UnityEngine.UI.Dropdown") ||
                      componentType.Equals("UnityEngine.UI.Toggle") ||
                      componentType.Equals("UnityEngine.UI.InputField") ||
-                     componentType.Equals("UnityEngine.UI.ScrollRect"))
+                     componentType.Equals("UnityEngine.UI.ScrollRect") ||
+                     componentType.Equals("TMPro.TMP_Dropdown") ||
+                     componentType.Equals("TMPro.TMP_InputField"))
             {
                 return
                     $"unityAction_{normalizedFieldName} = (value) => ValueChange({fieldName}, value);\n\t\t{fieldName}?.onValueChanged.AddListener(unityAction_{normalizedFieldName});";

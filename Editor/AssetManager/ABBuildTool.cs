@@ -12,6 +12,7 @@ namespace F8Framework.Core.Editor
     {
         private static Dictionary<string, AssetBundleMap.AssetMapping> assetMapping;
         private static Dictionary<string, string[]> resourceMapping;
+        private static Dictionary<string, string> manifestLogicalPathByBundlePath = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         // AssetBundle名与资产文件名不同时查找
         private static Dictionary<string, string> DiscrepantAssetPathMapping = new Dictionary<string, string>();
         
@@ -19,12 +20,13 @@ namespace F8Framework.Core.Editor
         {
             SessionState.SetBool("compilationFinishedBuildAB", false);
             string[] args = Environment.GetCommandLineArgs();
-            bool enableFullPathAssetLoading = BuildPkgTool.GetArgValue(args, "EnableFullPathAssetLoading-").Equals("true", StringComparison.OrdinalIgnoreCase);
-            bool enableFullPathExtensionAssetLoading = BuildPkgTool.GetArgValue(args, "EnableFullPathExtensionAssetLoading-").Equals("true", StringComparison.OrdinalIgnoreCase);
-            bool forceRebuildAssetBundle = BuildPkgTool.GetArgValue(args, "ForceRebuildAssetBundle-").Equals("true", StringComparison.OrdinalIgnoreCase);
-            bool appendHashToAssetBundleName = BuildPkgTool.GetArgValue(args, "AppendHashToAssetBundleName-").Equals("true", StringComparison.OrdinalIgnoreCase);
-            bool forceRemoteAssetBundle = BuildPkgTool.GetArgValue(args, "ForceRemoteAssetBundle-").Equals("true", StringComparison.OrdinalIgnoreCase);
-            bool disableUnityCacheOnWebGL = BuildPkgTool.GetArgValue(args, "DisableUnityCacheOnWebGL-").Equals("true", StringComparison.OrdinalIgnoreCase);
+            bool enableFullPathAssetLoading = string.Equals(BuildPkgTool.GetArgValue(args, "EnableFullPathAssetLoading-"), "true", StringComparison.OrdinalIgnoreCase);
+            bool enableFullPathExtensionAssetLoading = string.Equals(BuildPkgTool.GetArgValue(args, "EnableFullPathExtensionAssetLoading-"), "true", StringComparison.OrdinalIgnoreCase);
+            bool forceRebuildAssetBundle = string.Equals(BuildPkgTool.GetArgValue(args, "ForceRebuildAssetBundle-"), "true", StringComparison.OrdinalIgnoreCase);
+            bool appendHashToAssetBundleName = string.Equals(BuildPkgTool.GetArgValue(args, "AppendHashToAssetBundleName-"), "true", StringComparison.OrdinalIgnoreCase);
+            bool forceRemoteAssetBundle = string.Equals(BuildPkgTool.GetArgValue(args, "ForceRemoteAssetBundle-"), "true", StringComparison.OrdinalIgnoreCase);
+            bool disableUnityCacheOnWebGL = string.Equals(BuildPkgTool.GetArgValue(args, "DisableUnityCacheOnWebGL-"), "true", StringComparison.OrdinalIgnoreCase);
+            string assetManifestEncryptKey = BuildPkgTool.GetArgValue(args, "AssetManifestEncryptKey-") ?? "";
             int assetBundleOffset = 0;
             if (int.TryParse(BuildPkgTool.GetArgValue(args, "AssetBundleOffset-"), out int intValue))
             {
@@ -43,6 +45,7 @@ namespace F8Framework.Core.Editor
             F8GamePrefs.SetBool(nameof(F8GameConfig.DisableUnityCacheOnWebGL), disableUnityCacheOnWebGL);
             F8GamePrefs.SetInt(nameof(F8GameConfig.AssetBundleOffset), assetBundleOffset);
             F8GamePrefs.SetInt(nameof(F8GameConfig.AssetBundleXorKey), assetBundleXorKey);
+            F8GamePrefs.SetString(nameof(F8GameConfig.AssetManifestEncryptKey), assetManifestEncryptKey);
             BuildAllAB();
         }
 
@@ -107,67 +110,125 @@ namespace F8Framework.Core.Editor
         public static void DeleteRemovedAssetBundles()
         {
             FileTools.CheckDirAndCreateWhenNeeded(URLSetting.GetAssetBundlesFolder());
-            List<string> assetPaths = new List<string>();
+            HashSet<string> expectedDirectoryPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            HashSet<string> expectedBundlePaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            HashSet<string> expectedManifestPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             string assetBundlesPath = URLSetting.GetAssetBundlesFolder();
-            RecordAssetsAndDirectories(assetBundlesPath, assetBundlesPath, assetPaths, true, true);
+            List<string> sourceAssetPaths = new List<string>();
+            RecordAssetsAndDirectories(assetBundlesPath, assetBundlesPath, sourceAssetPaths, true, true);
+            foreach (string assetPath in sourceAssetPaths)
+            {
+                expectedDirectoryPaths.Add(assetPath);
+            }
+
             foreach (var pair in assetMapping)
             {
                 AssetBundleMap.AssetMapping mapping = pair.Value;
                 if (!string.IsNullOrEmpty(mapping.AbName))
                 {
-                    assetPaths.Add("/" + mapping.AbName);
+                    string bundlePath = "/" + mapping.AbName;
+                    expectedBundlePaths.Add(bundlePath);
+                    expectedManifestPaths.Add(GetExpectedManifestPath(bundlePath));
                 }
             }
             
-            FileTools.CheckDirAndCreateWhenNeeded(URLSetting.GetAssetBundlesOutPath());
-            List<string> abPaths = new List<string>();
             string abBundlesPath = URLSetting.GetAssetBundlesOutPath();
-            RecordAssetsAndDirectories(abBundlesPath, abBundlesPath, abPaths);
-            
-            foreach (string ab in abPaths)
+            FileTools.CheckDirAndCreateWhenNeeded(abBundlesPath);
+
+            foreach (string filePath in Directory.GetFiles(abBundlesPath, "*", SearchOption.AllDirectories))
             {
-                if (!assetPaths.Contains(ab) && !AssetPathsContainsDiscrepantAssetBundle(assetPaths, ab)) 
+                string extension = Path.GetExtension(filePath).ToLower();
+                if (extension == ".meta" || extension == ".ds_store")
                 {
-                    string abpath = URLSetting.GetAssetBundlesOutPath() + ab;
-                    if (File.Exists(abpath))
+                    continue;
+                }
+
+                string tempFilePath = FileTools.FormatToUnityPath(filePath);
+                string relativePath = ToOutputRelativePath(abBundlesPath, tempFilePath);
+                if (extension == ".manifest")
+                {
+                    string manifestLogicalPath = FileTools.FormatToUnityPath(Path.ChangeExtension(relativePath, null));
+                    if (!expectedManifestPaths.Contains(manifestLogicalPath) &&
+                        !AssetPathsContainsDiscrepantAssetBundle(expectedManifestPaths, manifestLogicalPath))
                     {
-                        if (FileTools.SafeDeleteFile(abpath))
-                        {
-                            FileTools.SafeDeleteFile(abpath + ".meta");
-                        }
-                        LogF8.LogAsset("删除多余AB文件：" + abpath);
+                        DeleteFileAndMeta(tempFilePath);
+                        LogF8.LogAsset("删除多余AB.manifest文件：" + tempFilePath);
                     }
-                    else if (File.Exists(abpath + ".manifest"))
+                }
+                else
+                {
+                    if (!expectedBundlePaths.Contains(relativePath) &&
+                        !AssetPathsContainsDiscrepantAssetBundle(expectedBundlePaths, relativePath))
                     {
-                        if (FileTools.SafeDeleteFile(abpath + ".manifest"))
-                        {
-                            FileTools.SafeDeleteFile(abpath+ ".manifest" + ".meta");
-                        }
-                        if (!F8GamePrefs.GetBool(nameof(F8GameConfig.AppendHashToAssetBundleName)))
-                        {
-                            LogF8.LogAsset("删除多余AB.manifest文件：" + abpath);
-                        }
+                        DeleteFileAndMeta(tempFilePath);
+                        LogF8.LogAsset("删除多余AB文件：" + tempFilePath);
                     }
-                    else if (Directory.Exists(abpath))
+                }
+            }
+
+            foreach (string directoryPath in Directory.GetDirectories(abBundlesPath, "*", SearchOption.AllDirectories)
+                         .OrderByDescending(path => path.Length))
+            {
+                string tempDirectoryPath = FileTools.FormatToUnityPath(directoryPath);
+                string relativePath = ToOutputRelativePath(abBundlesPath, tempDirectoryPath);
+                if (!expectedDirectoryPaths.Contains(relativePath))
+                {
+                    if (FileTools.SafeDeleteDir(tempDirectoryPath))
                     {
-                        if (FileTools.SafeDeleteDir(abpath))
-                        {
-                            LogF8.LogAsset("删除多余AB文件夹：" + abpath);
-                            string metaFilePath = abpath + ".meta";
-                            if (File.Exists(metaFilePath))
-                            {
-                                FileTools.SafeDeleteFile(metaFilePath);
-                            }
-                        }
+                        DeleteFileIfExists(tempDirectoryPath + ".meta");
+                        LogF8.LogAsset("删除多余AB文件夹：" + tempDirectoryPath);
                     }
-                    else
-                    {
-                        LogF8.LogAsset("AB文件路径不存在，已经被删除了：" + abpath);
-                    }
+                }
+            }
+
+            foreach (string metaPath in Directory.GetFiles(abBundlesPath, "*.meta", SearchOption.AllDirectories))
+            {
+                string ownerPath = metaPath.Substring(0, metaPath.Length - ".meta".Length);
+                if (!File.Exists(ownerPath) && !Directory.Exists(ownerPath))
+                {
+                    DeleteFileIfExists(metaPath);
                 }
             }
             
             AssetDatabase.Refresh();
+        }
+
+        private static bool DeleteFileIfExists(string filePath)
+        {
+            if (!File.Exists(filePath))
+            {
+                return false;
+            }
+
+            return FileTools.SafeDeleteFile(filePath);
+        }
+
+        private static void DeleteFileAndMeta(string filePath)
+        {
+            if (DeleteFileIfExists(filePath))
+            {
+                DeleteFileIfExists(filePath + ".meta");
+            }
+        }
+
+        private static string ToOutputRelativePath(string basePath, string targetPath)
+        {
+            return targetPath.Replace(basePath, "");
+        }
+
+        private static string GetExpectedManifestPath(string bundlePath)
+        {
+            if (string.IsNullOrEmpty(bundlePath))
+            {
+                return string.Empty;
+            }
+
+            if (manifestLogicalPathByBundlePath.TryGetValue(bundlePath, out string manifestLogicalPath))
+            {
+                return manifestLogicalPath;
+            }
+
+            return bundlePath;
         }
         
         public static void RecordAssetsAndDirectories(string basePath, string rootPath, List<string> assetPaths, bool removeExtension = false, bool notAddFiles = false)
@@ -247,7 +308,7 @@ namespace F8Framework.Core.Editor
             return parentPath;
         }
         
-        private static bool AssetPathsContainsDiscrepantAssetBundle(List<string> assetPaths, string ab)
+        private static bool AssetPathsContainsDiscrepantAssetBundle(ICollection<string> assetPaths, string ab)
         {
             if (DiscrepantAssetPathMapping.TryGetValue(ab, out string disPath))
                 return assetPaths.Contains(disPath);
@@ -272,6 +333,7 @@ namespace F8Framework.Core.Editor
                 ).Where(str => !str.EndsWith(".meta") && !str.EndsWith(".DS_Store"));
 
                 assetMapping = new Dictionary<string, AssetBundleMap.AssetMapping>();
+                manifestLogicalPathByBundlePath = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
                 foreach (string _filePath in allPaths)
                 {
@@ -358,6 +420,7 @@ namespace F8Framework.Core.Editor
                         }
                         
                         string realAbName = InsertBeforeLastDot(abName, hash);
+                        manifestLogicalPathByBundlePath["/" + realAbName] = "/" + abName;
                         string[] assetPathsArray = assetPathsForAbName.ToArray();
                         string version = BuildPkgTool.ToVersion;
                         string abFullPath = URLSetting.GetAssetBundlesOutPath() + "/" + realAbName;
@@ -446,6 +509,7 @@ namespace F8Framework.Core.Editor
                                 platformManifestPath = URLSetting.GetAssetBundlesOutPath() + "/" + platformManifestAbName;
                             }
 
+                            manifestLogicalPathByBundlePath["/" + platformManifestAbName] = "/" + URLSetting.GetPlatformName();
                             assetMapping.Add(URLSetting.GetPlatformName(), new AssetBundleMap.AssetMapping(platformManifestAbName, new string[]{},
                                 BuildPkgTool.ToVersion, FileTools.GetFileSize(platformManifestPath).ToString(),
                                 FileTools.CreateMd5ForFile(platformManifestPath), "", ""));
@@ -467,7 +531,7 @@ namespace F8Framework.Core.Editor
                 
             string AssetBundleMapPath = Application.dataPath + "/F8Framework/AssetMap/Resources/" + nameof(AssetBundleMap) + ".json";
             FileTools.CheckFileAndCreateDirWhenNeeded(AssetBundleMapPath);
-            FileTools.SafeWriteAllText(AssetBundleMapPath, Util.LitJson.ToJson(assetMapping));
+            F8JsonEncryption.WriteJsonToFile(AssetBundleMapPath, Util.LitJson.ToJson(assetMapping));
             AssetDatabase.Refresh();
             
             LogF8.LogAsset("写入AssetBundles资产数据 生成：" + AssetBundleMapPath);
@@ -584,7 +648,7 @@ namespace F8Framework.Core.Editor
             
             string ResourceMapPath = Application.dataPath + "/F8Framework/AssetMap/Resources/" + nameof(ResourceMap) + ".json";
             FileTools.CheckFileAndCreateDirWhenNeeded(ResourceMapPath);
-            FileTools.SafeWriteAllText(ResourceMapPath, Util.LitJson.ToJson(resourceMapping));
+            F8JsonEncryption.WriteJsonToFile(ResourceMapPath, Util.LitJson.ToJson(resourceMapping));
             AssetDatabase.Refresh();
             
             LogF8.LogAsset("写入Resources资产数据 生成：" + ResourceMapPath);

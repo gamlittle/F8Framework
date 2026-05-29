@@ -23,8 +23,8 @@ namespace F8Framework.Core
             { "Button", typeof(UnityEngine.UI.Button).ToString() },{ "btn", typeof(UnityEngine.UI.Button).ToString() },
             { "Image", typeof(UnityEngine.UI.Image).ToString() },{ "img", typeof(UnityEngine.UI.Image).ToString() },
             { "RawImage", typeof(UnityEngine.UI.RawImage).ToString() },{ "rimg", typeof(UnityEngine.UI.RawImage).ToString() },
-            { "Text (Legacy)", typeof(UnityEngine.UI.Text).ToString() },{ "txt", typeof(UnityEngine.UI.Text).ToString() },
-            { "InputField", typeof(UnityEngine.UI.InputField).ToString() },
+            { "Text", typeof(UnityEngine.UI.Text).ToString() },{ "Text (Legacy)", typeof(UnityEngine.UI.Text).ToString() },{ "txt", typeof(UnityEngine.UI.Text).ToString() },
+            { "InputField", typeof(UnityEngine.UI.InputField).ToString() },{ "InputField (Legacy)", typeof(UnityEngine.UI.InputField).ToString() },
             { "Slider", typeof(UnityEngine.UI.Slider).ToString() },
             { "Mask", typeof(UnityEngine.UI.Mask).ToString() },
             { "RectMask2D", typeof(UnityEngine.UI.RectMask2D).ToString() },
@@ -32,9 +32,9 @@ namespace F8Framework.Core
             { "Scrollbar", typeof(UnityEngine.UI.Scrollbar).ToString() },
             { "ScrollRect", typeof(UnityEngine.UI.ScrollRect).ToString() },
             { "Dropdown (Legacy)", typeof(UnityEngine.UI.Dropdown).ToString() },
-            { "Text (TMP)", "TMPro.TMP_Text" },{ "tmp", "TMPro.TMP_Text" },
-            { "Dropdown", "TMPro.TMP_Dropdown" },
-            { "InputField (TMP)", "TMPro.TMP_InputField" },
+            { "Text (TMP)", "TMPro.TMP_Text" },{ "tmp", "TMPro.TMP_Text" },{ "TextMeshProUGUI", "TMPro.TMP_Text" },
+            { "Dropdown", "TMPro.TMP_Dropdown" },{ "TMP_Dropdown", "TMPro.TMP_Dropdown" },
+            { "InputField (TMP)", "TMPro.TMP_InputField" },{ "TMP_InputField", "TMPro.TMP_InputField" },
         };
     }
 }

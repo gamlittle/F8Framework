@@ -45,24 +45,30 @@ namespace F8Framework.Core
         
         public void OnInit(object createParam)
         {
-            GameVersion gameVersion = Util.LitJson.ToObject<GameVersion>(Resources.Load<TextAsset>(nameof(GameVersion)).ToString());
+            LogF8.Log($"读取默认版本配置，来源：Resources/{nameof(GameVersion)}");
+            GameVersion gameVersion = Util.LitJson.ToObject<GameVersion>(F8JsonEncryption.ReadJsonFromTextAsset(Resources.Load<TextAsset>(nameof(GameVersion))));
             GameConfig.LocalGameVersion = gameVersion;
         }
         
         // 初始化本地版本
         public void InitLocalVersion()
         {
-            if (File.Exists(Application.persistentDataPath + "/" + nameof(GameVersion) + ".json"))
+            string localGameVersionPath = Application.persistentDataPath + "/" + nameof(GameVersion) + ".json";
+            
+            if (File.Exists(localGameVersionPath))
             {
-                string json =
-                    FileTools.SafeReadAllText(Application.persistentDataPath + "/" + nameof(GameVersion) + ".json");
+                LogF8.Log($"读取本地版本配置，来源：{localGameVersionPath}");
+                string json = F8JsonEncryption.ReadJsonFromFile(localGameVersionPath);
                 GameConfig.LocalGameVersion = Util.LitJson.ToObject<GameVersion>(json);
             }
             else
             {
-                FileTools.SafeWriteAllText(Application.persistentDataPath + "/" + nameof(GameVersion) + ".json",
+                LogF8.Log($"本地版本配置不存在，写入默认版本配置，目标：{localGameVersionPath}");
+                F8JsonEncryption.WriteJsonToFile(localGameVersionPath,
                     Util.LitJson.ToJson(GameConfig.LocalGameVersion));
             }
+
+            LogF8.Log($"初始化本地版本成功：Version={GameConfig.LocalGameVersion.Version}，EnableHotUpdate={GameConfig.LocalGameVersion.EnableHotUpdate}，EnablePackage={GameConfig.LocalGameVersion.EnablePackage}");
         }
         
         // 初始化远程版本
@@ -74,7 +80,7 @@ namespace F8Framework.Core
             }
             
             string path = GameConfig.LocalGameVersion.AssetRemoteAddress + "/" + nameof(GameVersion) + ".json";
-            LogF8.Log($"初始化远程版本：{path}");
+            LogF8.Log($"请求远程版本配置，来源：{path}");
             
             UnityWebRequest webRequest = UnityWebRequest.Get(path);
             yield return webRequest.SendWebRequest();
@@ -84,15 +90,16 @@ namespace F8Framework.Core
             }
             else
             {
-                string text = webRequest.downloadHandler.text;
+                string text = F8JsonEncryption.DecryptJsonIfNeeded(webRequest.downloadHandler.text);
                 GameVersion gameVersion = Util.LitJson.ToObject<GameVersion>(text);
                 GameConfig.RemoteGameVersion = gameVersion;
+                LogF8.Log($"读取远程版本配置成功，来源：{path}，Version={GameConfig.RemoteGameVersion.Version}，Address={GameConfig.RemoteGameVersion.AssetRemoteAddress}");
             }
             webRequest.Dispose();
             webRequest = null;
         }
 
-        // 初始化资源版本
+        // 初始化热更资产配置
         public IEnumerator InitAssetVersion()
         {
             if (!GameConfig.LocalGameVersion.EnableHotUpdate && !GameConfig.LocalGameVersion.EnablePackage)
@@ -101,28 +108,53 @@ namespace F8Framework.Core
             }
 
             string path = GameConfig.LocalGameVersion.AssetRemoteAddress + HotUpdateDirName + Separator + nameof(AssetBundleMap) + ".json";
-            LogF8.Log($"始化资源版本：{path}");
+            LogF8.Log($"请求热更资产配置，来源：{path}");
             
             UnityWebRequest webRequest = UnityWebRequest.Get(path);
             yield return webRequest.SendWebRequest();
             if (webRequest.result != UnityWebRequest.Result.Success)
             {
-                LogF8.LogError($"获取游戏资源版本失败：{path} ，错误：{webRequest.error}");
+                LogF8.LogError($"请求热更资产配置失败，来源：{path}，错误：{webRequest.error}");
             }
             else
             {
-                string text = webRequest.downloadHandler.text;
-                Dictionary<string, AssetBundleMap.AssetMapping> assetBundleMap = Util.LitJson.ToObject<Dictionary<string, AssetBundleMap.AssetMapping>>(text);
+                string text = F8JsonEncryption.DecryptJsonIfNeeded(webRequest.downloadHandler.text);
+                Dictionary<string, AssetBundleMap.AssetMapping> assetBundleMap = Util.LitJson.ToObject<Dictionary<string, AssetBundleMap.AssetMapping>>(text) ?? new Dictionary<string, AssetBundleMap.AssetMapping>();
                 GameConfig.RemoteAssetBundleMap = assetBundleMap;
+                int assetCount = GameConfig.RemoteAssetBundleMap.Count(mapping => mapping.Value != null && !mapping.Value.AbName.IsNullOrEmpty());
+                LogF8.Log($"读取热更资产配置成功：资源总数={assetCount}");
             }
             webRequest.Dispose();
             webRequest = null;
             
-            if (File.Exists(Application.persistentDataPath + "/" + nameof(AssetBundleMap) + ".json"))
+            string localAssetBundleMapPath = Application.persistentDataPath + "/" + nameof(AssetBundleMap) + ".json";
+            if (File.Exists(localAssetBundleMapPath))
             {
-                string json = FileTools.SafeReadAllText(Application.persistentDataPath + "/" + nameof(AssetBundleMap) + ".json");
+                LogF8.Log($"读取本地资产配置，来源：{localAssetBundleMapPath}");
+                string json = F8JsonEncryption.ReadJsonFromFile(localAssetBundleMapPath);
                 AssetBundleMap.Mappings = Util.LitJson.ToObject<Dictionary<string, AssetBundleMap.AssetMapping>>(json);
             }
+        }
+
+        private static Dictionary<string, AssetBundleMap.AssetMapping> MergeAssetBundleMappings(
+            Dictionary<string, AssetBundleMap.AssetMapping> baseMappings,
+            Dictionary<string, AssetBundleMap.AssetMapping> deltaMappings)
+        {
+            Dictionary<string, AssetBundleMap.AssetMapping> mergedMappings = baseMappings != null
+                ? new Dictionary<string, AssetBundleMap.AssetMapping>(baseMappings)
+                : new Dictionary<string, AssetBundleMap.AssetMapping>();
+
+            if (deltaMappings == null)
+            {
+                return mergedMappings;
+            }
+
+            foreach (var mapping in deltaMappings)
+            {
+                mergedMappings[mapping.Key] = mapping.Value;
+            }
+
+            return mergedMappings;
         }
         
         // 游戏修复，资源清理
@@ -307,14 +339,18 @@ namespace F8Framework.Core
                 {
                     GameConfig.LocalGameVersion.Version = GameConfig.RemoteGameVersion.Version;
                     GameConfig.LocalGameVersion.HotUpdateVersion = new List<string>();
-                    FileTools.SafeWriteAllText(Application.persistentDataPath + "/" + nameof(GameVersion) + ".json",
+                    string localGameVersionPath = Application.persistentDataPath + "/" + nameof(GameVersion) + ".json";
+                    LogF8.Log($"写入热更后的本地版本配置，目标：{localGameVersionPath}");
+                    F8JsonEncryption.WriteJsonToFile(localGameVersionPath,
                         Util.LitJson.ToJson(GameConfig.LocalGameVersion));
                 }
                 
                 if (GameConfig.RemoteAssetBundleMap.Count > 0)
                 {
-                    AssetBundleMap.Mappings = GameConfig.RemoteAssetBundleMap;
-                    FileTools.SafeWriteAllText(Application.persistentDataPath + "/" + nameof(AssetBundleMap) + ".json",
+                    AssetBundleMap.Mappings = MergeAssetBundleMappings(AssetBundleMap.Mappings, GameConfig.RemoteAssetBundleMap);
+                    string localAssetBundleMapPath = Application.persistentDataPath + "/" + nameof(AssetBundleMap) + ".json";
+                    LogF8.Log($"写入合并后的本地资产配置，目标：{localAssetBundleMapPath}");
+                    F8JsonEncryption.WriteJsonToFile(localAssetBundleMapPath,
                         Util.LitJson.ToJson(AssetBundleMap.Mappings));
                 }
             }
@@ -636,7 +672,9 @@ namespace F8Framework.Core
                         GameConfig.LocalGameVersion.SubPackage.RemoveAt(i);
                     }
                 }
-                FileTools.SafeWriteAllText(Application.persistentDataPath + "/" + nameof(GameVersion) + ".json",
+                string localGameVersionPath = Application.persistentDataPath + "/" + nameof(GameVersion) + ".json";
+                LogF8.Log($"写入分包更新后的本地版本配置，目标：{localGameVersionPath}");
+                F8JsonEncryption.WriteJsonToFile(localGameVersionPath,
                     Util.LitJson.ToJson(GameConfig.LocalGameVersion));
             }
             
@@ -663,7 +701,9 @@ namespace F8Framework.Core
                 }
             }
             
-            FileTools.SafeWriteAllText(Application.persistentDataPath + "/" + nameof(GameVersion) + ".json",
+            string localGameVersionPath = Application.persistentDataPath + "/" + nameof(GameVersion) + ".json";
+            LogF8.Log($"写入分包更新后的本地版本配置，目标：{localGameVersionPath}");
+            F8JsonEncryption.WriteJsonToFile(localGameVersionPath,
                 Util.LitJson.ToJson(GameConfig.LocalGameVersion));
 
             completed?.Invoke();

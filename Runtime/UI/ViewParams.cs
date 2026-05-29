@@ -3,6 +3,14 @@ using UnityEngine;
 
 namespace F8Framework.Core
 {
+    internal enum ViewState
+    {
+        None,
+        Loading,
+        Active,
+        Closing
+    }
+
     public class UICallbacks
     {
         public delegate void OnAddedEventDelegate(object[] parameters, int uiId);
@@ -32,7 +40,12 @@ namespace F8Framework.Core
         public string PrefabPath;
         public object[] Params;
         public UICallbacks Callbacks;
-        public bool Valid;
+        public bool Valid => State == ViewState.Active || State == ViewState.Closing;
+        internal bool Loading => State == ViewState.Loading;
+        internal ViewState State;
+        internal bool DestroyOnClose;
+        internal bool UnloadAllLoadedObjectsOnCancel;
+        internal int LoadVersion;
         public GameObject Go;
         public DelegateComponent DelegateComponent;
         public BaseView BaseView;
