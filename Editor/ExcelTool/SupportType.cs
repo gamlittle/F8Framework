@@ -14,6 +14,7 @@ namespace F8Framework.Core.Editor
     {
         private string[] Names;
         private string[] Types;
+        private bool[] IsKeys;
         private List<ReadExcel.ConfigData> ConfigDatas;
         private string ClassName;
         private string InputPath;
@@ -25,6 +26,7 @@ namespace F8Framework.Core.Editor
             ClassName = className;
             Names = configDatas.Select(x => x.Name).ToArray();
             Types = configDatas.Select(x => x.Type).ToArray();
+            IsKeys = configDatas.Select(x => x.IsKey).ToArray();
             ConfigDatas = configDatas;
         }
 
@@ -49,14 +51,14 @@ namespace F8Framework.Core.Editor
             {
                 throw new Exception("表名为：" + ClassName + "，字段名重复：" + string.Join("，",  duplicates));
             }
-            return CreateCode(ClassName, Types, Names);
+            return CreateCode(ClassName, Types, Names, IsKeys);
         }
         
         private string GetIdType()
         {
             for (int i = 0; i < Names.Length; i++)
             {
-                if (Names[i].Equals("id", StringComparison.OrdinalIgnoreCase))
+                if (Names[i].Equals("id", StringComparison.OrdinalIgnoreCase) || IsKeys[i])
                 {
                     return ReadExcel.GetTrueType(Types[i], ClassName, InputPath);
                 }
@@ -66,7 +68,7 @@ namespace F8Framework.Core.Editor
         }
         
         //创建代码。   
-        private string CreateCode(string ClassName, string[] types, string[] fields)
+        private string CreateCode(string ClassName, string[] types, string[] fields, bool[] isKeys)
         {
             //生成类
             StringBuilder classSource = new StringBuilder();
@@ -128,7 +130,7 @@ namespace F8Framework.Core.Editor
             string idType = "";
             for (int i = 0; i < fields.Length; i++)
             {
-                if (fields[i].Equals("id", StringComparison.OrdinalIgnoreCase))
+                if (fields[i].Equals("id", StringComparison.OrdinalIgnoreCase) || isKeys[i])
                 {
                     idType = ReadExcel.GetTrueType(types[i], ClassName, InputPath);
                     break;

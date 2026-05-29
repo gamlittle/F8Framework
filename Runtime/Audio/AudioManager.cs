@@ -1,9 +1,12 @@
 using System;
+using System.Collections.Generic;
+using System.Linq;
 using UnityEngine;
 using UnityEngine.Audio;
 
 namespace F8Framework.Core
 {
+    [FixedUpdateRefresh]
     public class AudioManager : ModuleSingletonMono<AudioManager>, IModule
     {
         /*----------背景音乐----------*/
@@ -40,6 +43,9 @@ namespace F8Framework.Core
         private const string _switchVoiceKey = "SwitchVoiceKey";
         private const string _volumeAudioEffectKey = "VolumeAudioEffect";
         private const string _switchAudioEffectKey = "SwitchAudioEffect";
+
+        private Dictionary<string, float> _audioCD = new Dictionary<string, float>();
+        private List<string> _audioCDRemoved = new List<string>();
         public void OnInit(object createParam)
         {
             _transform = this.transform;
@@ -117,13 +123,26 @@ namespace F8Framework.Core
 
         public void OnFixedUpdate()
         {
-            
+            // LogF8.LogModule($"------======------ AudioManager OnFixedUpdate ... Time.fixedDeltaTime = {Time.fixedDeltaTime}");
+            foreach (var item in _audioCD.ToList())
+            {
+                if (item.Value <= 0)
+                {
+                    continue;
+                }
+                var cd = item.Value - Time.fixedDeltaTime;
+                if (cd <= 0)
+                {
+                    cd = 0;
+                }
+                _audioCD[item.Key] = cd;
+            }
         }
 
         public void OnTermination()
         {
             StopAll();
-
+            Tween.Instance.CancelTween(AudioMusic.AudioTween);
             Tween.Instance?.CancelTween(AudioMusic.AudioTween);
             Tween.Instance?.CancelTween(AudioMusicVoice.AudioTween);
             Tween.Instance?.CancelTween(AudioMusicBtnClick.AudioTween);
@@ -190,7 +209,8 @@ namespace F8Framework.Core
             {
                 _volumeMusic = value;
                 PlayerPrefs.SetFloat(_volumeMusicKey, value);
-                AudioMusic.MusicSource.volume = value;
+                if (AudioMusic.MusicSource)
+                    AudioMusic.MusicSource.volume = value;
             }
         }
         
@@ -379,7 +399,7 @@ namespace F8Framework.Core
         }
 
         // 播放音效特效
-        public void PlayAudioEffect(string assetName, Action callback = null, bool loop = false, int priority = 0, float fadeDuration = 0f)
+        public void PlayAudioEffect(string assetName, Action callback = null, bool loop = false, int priority = 0, float fadeDuration = 0f, float cd = 0f)
         {
             if (!_switchAudioEffect)
             {
@@ -389,7 +409,26 @@ namespace F8Framework.Core
             {
                 return;
             }
+            if (_audioCD.TryGetValue(assetName, out var curcd))
+            {
+                if (curcd > 0)
+                {
+                    return;
+                }
+            }
             AudioMusicAudioEffect.Load(assetName, callback, loop, priority, fadeDuration);
+            if (cd > 0)
+            {
+                // LogF8.LogModule($"AudioManager [{name}] PlayAudioEffect CD ... assetName = {assetName} ... cd = {cd}");
+                if (_audioCD.ContainsKey(assetName))
+                {
+                    _audioCD[assetName] = cd;
+                }
+                else
+                {
+                    _audioCD.Add(assetName, cd);
+                }
+            }
         }
         
         /*----------一次性3D音效特效----------*/
@@ -403,16 +442,36 @@ namespace F8Framework.Core
         /// <param name="spatialBlend">2d到3d的比例。</param>
         /// <param name="maxNum">最大同时播放个数。</param>
         /// <param name="callback">播放完成回调。</param>
-        public void PlayAudioEffect3D(string assetName, bool isRandom = false, Vector3? audioPosition = null, float volume = 1f, float spatialBlend = 1f,
+        public void PlayAudioEffect3D(string assetName, float cd = 0f, bool isRandom = false, Vector3? audioPosition = null, float volume = 1f, float spatialBlend = 1f,
             int maxNum = 5, Action callback = null)
         {
             if (!_switchAudioEffect)
             {
-                return ;
+                return;
+            }
+            if (_audioCD.TryGetValue(assetName, out var curcd))
+            {
+                if (curcd > 0)
+                {
+                    // LogF8.LogModule($"AudioManager [{name}] PlayAudioEffect3D CD 未到 ... assetName = {assetName} ... curcd = {curcd} ----- return -----");
+                    return;
+                }
             }
             Vector3 actualPosition = audioPosition.GetValueOrDefault(_transform.position);
             float actualVolume = volume * _volumeAudioEffect;
             _audioMusicAudioEffect3D.Load(assetName, actualPosition, actualVolume, spatialBlend, maxNum, callback, _audioEffectMixerGroup, isRandom);
+            if (cd > 0)
+            {
+                // LogF8.LogModule($"AudioManager [{name}] PlayAudioEffect3D CD ... assetName = {assetName} ... cd = {cd}");
+                if (_audioCD.ContainsKey(assetName))
+                {
+                    _audioCD[assetName] = cd;
+                }
+                else
+                {
+                    _audioCD.Add(assetName, cd);
+                }
+            }
         }
         
         /*----------全局控制----------*/

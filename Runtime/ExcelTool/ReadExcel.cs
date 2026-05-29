@@ -157,6 +157,7 @@ namespace F8Framework.Core
             public string Type; //数据类型
             public string Name; //字段名
             public string Data; //数据值
+            public bool IsKey;  // 是否是关键字
             public VariantData VariantInfo; //变体信息
         }
 

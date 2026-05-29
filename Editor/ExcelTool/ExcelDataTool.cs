@@ -335,10 +335,13 @@ namespace F8Framework.Core.Editor
                 {
                     // sheet name
                     string className = excelReader.Name;
+                    if (className.StartsWith("#")) continue;
                     string[] types = null; //数据类型
                     string[] names = null; //字段名
                     List<ReadExcel.ConfigData[]> dataList = new List<ReadExcel.ConfigData[]>();
                     int index = 1;
+                    int startIdx = 0;
+                    int keyIdx = 0;
                     //把读取的数据和数据类型,名称保存起来,后面用来动态生成类
                     List<ReadExcel.ConfigData> configDataList = new List<ReadExcel.ConfigData>();
                     //开始读取
@@ -357,13 +360,30 @@ namespace F8Framework.Core.Editor
                             ++index;
                             continue;
                         }
+                        // 第一行表示说明及主键
+                        if (index == 1)
+                        {
+                            for (int i = 0; i < datas.Length; ++i)
+                            {
+                                if (string.IsNullOrEmpty(datas[i]))
+                                {
+                                    continue;
+                                }
+                                if (datas[i].ToLower().EndsWith(":key"))
+                                {
+                                    startIdx = 1;
+                                    keyIdx = i;
+                                    break;
+                                }
+                            }
+                        }
 
                         //第1行表示类型
-                        if (index == 1) types = datas;
+                        if (index == startIdx + 1) types = datas;
                         //第2行表示变量名
-                        else if (index == 2) names = datas;
+                        else if (index == startIdx + 2) names = datas;
                         //后面的表示数据
-                        else if (index > 2)
+                        else if (index > startIdx + 2)
                         {
                             if (types == null || names == null || datas == null)
                             {
@@ -377,10 +397,13 @@ namespace F8Framework.Core.Editor
                                     continue; //空的数据不处理
                                 
                                 ReadExcel.ConfigData data = new ReadExcel.ConfigData();
-                                data.Type = types[j];
-                                data.Name = names[j];
+                                data.Type = types[j].Replace(" ", "");
+                                data.Name = names[j].Replace(" ", "");
                                 data.Data = datas[j];
-                                
+                                data.IsKey = j == keyIdx;
+                                if (string.IsNullOrEmpty(data.Type) || string.IsNullOrEmpty(data.Name))
+                                    continue; //空的数据不处理
+
                                 configDataList.Add(data);
                             }
 
@@ -496,7 +519,7 @@ namespace F8Framework.Core.Editor
             {
                 //Type.FullName 获取该类型的完全限定名称，包括其命名空间，但不包括程序集。
                 object t = Util.Assembly.GetTypeInstance(temp.FullName);
-
+                var keyName = "";
                 foreach (ReadExcel.ConfigData data in datas)
                 {
                     if (data.VariantInfo != null)
@@ -525,6 +548,10 @@ namespace F8Framework.Core.Editor
                             continue;
                         }
                         FieldInfo info = temp.GetField(data.Name);
+                        if (data.IsKey)
+                        {
+                            keyName = data.Name;
+                        }
                         // FieldInfo.SetValue 设置对象内指定名称的字段的值
                         if (info != null)
                         {
@@ -538,7 +565,8 @@ namespace F8Framework.Core.Editor
                 PropertyInfo propertyInfoId = null;
                 foreach (var field in temp.GetFields())
                 {
-                    if (!string.Equals(field.Name, "id", StringComparison.OrdinalIgnoreCase)) continue;
+                    //if (!string.Equals(field.Name, "id", StringComparison.OrdinalIgnoreCase)) continue;
+                    if (!string.Equals(field.Name, keyName, StringComparison.OrdinalIgnoreCase)) continue;
                     fieldInfoId = field;
                     break;
                 }
@@ -547,7 +575,8 @@ namespace F8Framework.Core.Editor
                 {
                     foreach (var property in temp.GetProperties())
                     {
-                        if (!string.Equals(property.Name, "id", StringComparison.OrdinalIgnoreCase)) continue;
+                        // if (!string.Equals(property.Name, "id", StringComparison.OrdinalIgnoreCase)) continue;
+                        if (!string.Equals(property.Name, keyName, StringComparison.OrdinalIgnoreCase)) continue;
                         propertyInfoId = property;
                         break;
                     }
